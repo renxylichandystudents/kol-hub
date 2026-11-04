@@ -99,6 +99,17 @@ CREATE TABLE IF NOT EXISTS campaign_kols (
 );
 
 -- ---------------------------------------------------------------------
+-- Lengkapi kolom pada tabel yang dibuat dengan skema versi lama
+-- (CREATE TABLE IF NOT EXISTS tidak mengubah tabel yang sudah ada)
+-- ---------------------------------------------------------------------
+ALTER TABLE users        ADD COLUMN IF NOT EXISTS role userrole NOT NULL DEFAULT 'ecommerce';
+ALTER TABLE kol_accounts ADD COLUMN IF NOT EXISTS name VARCHAR(255);
+ALTER TABLE kol_accounts ADD COLUMN IF NOT EXISTS followers INTEGER;
+ALTER TABLE kol_accounts ADD COLUMN IF NOT EXISTS engagement_rate NUMERIC(6, 2);
+ALTER TABLE kol_accounts ADD COLUMN IF NOT EXISTS zone_id INTEGER REFERENCES zones(id);
+ALTER TABLE kol_accounts ADD COLUMN IF NOT EXISTS score NUMERIC(5, 2);
+
+-- ---------------------------------------------------------------------
 -- Data awal
 -- ---------------------------------------------------------------------
 INSERT INTO zones (name) VALUES
