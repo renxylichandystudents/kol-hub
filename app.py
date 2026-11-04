@@ -140,12 +140,12 @@ def login_page():
     with tab1:
         st.subheader("🔐 Login")
         
-        email = st.text_input("Email", placeholder="contoh: user@mitra10.co.id")
-        password = st.text_input("Password", type="password")
+        email = st.text_input("Email", placeholder="contoh: user@mitra10.co.id", key="login_email")
+        password = st.text_input("Password", type="password", key="login_password")
         
         col_a, col_b, col_c = st.columns([1, 2, 1])
         with col_b:
-            if st.button("Login", use_container_width=True, type="primary"):
+            if st.button("Login", use_container_width=True, type="primary", key="login_button"):
                 if not email or not password:
                     st.error("Please enter email and password")
                 else:
@@ -162,13 +162,13 @@ def login_page():
     with tab2:
         st.subheader("📝 Register New Account")
         
-        name = st.text_input("Full Name")
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        confirm_password = st.text_input("Confirm Password", type="password")
-        role = st.selectbox("Role", ["ecommerce", "asst_manager", "manager", "store", "finance"])
+        name = st.text_input("Full Name", key="register_name")
+        email = st.text_input("Email", key="register_email")
+        password = st.text_input("Password", type="password", key="register_password")
+        confirm_password = st.text_input("Confirm Password", type="password", key="register_confirm_password")
+        role = st.selectbox("Role", ["ecommerce", "asst_manager", "manager", "store", "finance"], key="register_role")
         
-        if st.button("Register", use_container_width=True, type="primary"):
+        if st.button("Register", use_container_width=True, type="primary", key="register_button"):
             if not all([name, email, password, confirm_password]):
                 st.error("Please fill all fields")
             elif password != confirm_password:
