@@ -1,0 +1,9 @@
+# Kredensial — jangan pernah di-push
+.streamlit/secrets.toml
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

@@ -43,21 +43,55 @@ if 'page' not in st.session_state:
     st.session_state.page = 'login'
 
 # Database connection settings
-DB_URL = os.environ.get("DATABASE_URL")
+def get_database_url():
+    """Ambil DATABASE_URL dari Streamlit Secrets (Cloud / .streamlit/secrets.toml),
+    lalu fallback ke environment variable."""
+    url = None
+    try:
+        url = st.secrets.get("DATABASE_URL")
+    except Exception:
+        # Tidak ada secrets.toml (mis. saat run lokal tanpa secrets)
+        url = None
+    if not url:
+        url = os.environ.get("DATABASE_URL")
+    if url and "sslmode=" not in url:
+        # Supabase mewajibkan koneksi SSL
+        url += ("&" if "?" in url else "?") + "sslmode=require"
+    return url
+
+DB_URL = get_database_url()
 
 def get_db_connection():
     """Get database connection"""
     if not DB_URL:
-        st.error("DATABASE_URL environment variable not set!")
+        st.error("DATABASE_URL belum di-set. Tambahkan di Streamlit Cloud → Settings → Secrets.")
         return None
-    
+
     try:
         import psycopg2
-        conn = psycopg2.connect(DB_URL)
+        conn = psycopg2.connect(DB_URL, connect_timeout=10)
         return conn
     except Exception as e:
         st.error(f"Database connection error: {str(e)}")
         return None
+
+@st.cache_data(ttl=30, show_spinner=False)
+def check_db_status():
+    """Cek koneksi & keberadaan tabel users. Return (ok, pesan)."""
+    if not DB_URL:
+        return False, "DATABASE_URL belum di-set di Secrets"
+    try:
+        import psycopg2
+        conn = psycopg2.connect(DB_URL, connect_timeout=10)
+        cur = conn.cursor()
+        cur.execute("SELECT to_regclass('public.users')")
+        has_users = cur.fetchone()[0] is not None
+        conn.close()
+        if not has_users:
+            return False, "Terhubung, tapi tabel 'users' belum ada — jalankan db/schema.sql di Supabase"
+        return True, "Database terhubung"
+    except Exception as e:
+        return False, f"Gagal terhubung: {e}"
 
 def hash_password(password):
     """Simple password hashing"""
@@ -133,8 +167,14 @@ def login_page():
     st.markdown('<h1 class="main-header">🎯 KOL Hub</h1>', unsafe_allow_html=True)
     st.markdown('<p style="font-size: 1.2rem; color: #666;">Mitra10 Digital Marketing Platform</p>', unsafe_allow_html=True)
     
+    db_ok, db_msg = check_db_status()
+    if db_ok:
+        st.caption(f"🟢 {db_msg}")
+    else:
+        st.warning(f"🔴 {db_msg}")
+
     st.divider()
-    
+
     tab1, tab2 = st.tabs(["Login", "Register"])
     
     with tab1:
