@@ -167,11 +167,23 @@ def kol_template() -> bytes:
         "Akun yang sudah ada (username/link sama) akan digabung, bukan dibuat ganda."]})})
 
 
+def _excel_safe(d: pd.DataFrame) -> pd.DataFrame:
+    """Excel tidak mendukung datetime berzona waktu → konversi ke waktu Jakarta tanpa zona."""
+    d = d.copy()
+    for col in d.columns:
+        s = d[col]
+        if isinstance(s.dtype, pd.DatetimeTZDtype):
+            d[col] = s.dt.tz_convert("Asia/Jakarta").dt.tz_localize(None)
+        elif s.dtype == object and s.map(lambda v: getattr(v, "tzinfo", None) is not None).any():
+            d[col] = pd.to_datetime(s, utc=True).dt.tz_convert("Asia/Jakarta").dt.tz_localize(None)
+    return d
+
+
 def _xlsx(sheets: dict[str, pd.DataFrame]) -> bytes:
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as w:
         for name, d in sheets.items():
-            d.to_excel(w, sheet_name=name, index=False)
+            _excel_safe(d).to_excel(w, sheet_name=name[:31], index=False)
     return buf.getvalue()
 
 
