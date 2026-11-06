@@ -42,7 +42,7 @@ tests/                 # unit rumus, pipeline, integrasi alur approval, RBAC, sm
 | 9 | Campaign & Pengajuan | `campaign.py` | 23 | Approval Request Toko | `request_approval.py` |
 | 10 | Seleksi & Review KOL | `seleksi.py` | 24 | Model & Testing | `model.py` |
 | 11 | Bandingkan KOL | `bandingkan.py` | 25 | Akses & Role | `akses.py` |
-| 12 | Draft Pengajuan | `draft.py` | – | Akun Saya (ganti sandi/2FA) | `akun.py` |
+| 12 | Draft Pengajuan | `draft.py` | – | Akun Saya (ganti sandi, riwayat login) | `akun.py` |
 | 13 | Review & Approval | `approval.py` | | | |
 
 ## Deploy (Streamlit Community Cloud + Supabase)

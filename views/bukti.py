@@ -1,4 +1,5 @@
 """Layar 20 — Bukti Tayang & Status RO / Pembayaran: upload bukti tayang & update status oleh Digital Marketing & Finance."""
+import io
 from datetime import datetime, time
 
 import pandas as pd
@@ -96,7 +97,13 @@ if can(user["role"], "proof.input"):
             st.rerun()
     if pd.notna(r["bukti_nama"]):
         img = db.scalar("SELECT bukti FROM posts WHERE item_id=%s", (int(r["item_id"]),))
-        if img and len(img) > 200:
-            st.image(img, caption="Bukti tayang tersimpan", width=260)
+        if img:
+            try:  # file bukti bisa berupa PDF / file rusak → jangan sampai layar crash
+                from PIL import Image
+                Image.open(io.BytesIO(img)).verify()
+                st.image(img, caption="Bukti tayang tersimpan", width=260)
+            except Exception:
+                st.download_button("Unduh bukti tayang tersimpan", img, file_name=str(r["bukti_nama"]),
+                                   key=f"dl_bukti_{int(r['item_id'])}")
 if can(user["role"], "payment.view"):
     st.caption("Status pembayaran diperbarui Finance di menu Pembayaran & Pajak; status RO diperbarui di menu Form Approval RO.")

@@ -12,11 +12,14 @@ pytestmark = needs_db
 ROLE_PAGES = {
     "ecommerce": ["dashboard", "social", "performa", "upload_traffic", "kol_db", "kol_analisa", "bandingkan", "mapping", "campaign",
                   "seleksi", "draft", "ro", "kalender", "timeline", "brief", "report", "bukti", "pembayaran", "request_approval", "model", "akun"],
-    "asst_manager": ["dashboard", "approval", "campaign", "ro", "kol_db"],
-    "manager": ["dashboard", "approval"],
-    "finance": ["dashboard", "pembayaran", "ro", "bukti"],
-    "store": ["dashboard", "kalender", "timeline", "report", "bukti", "request_toko"],
-    "super_user": ["akses", "model", "request_toko", "approval"],
+    "asst_manager": ["dashboard", "social", "performa", "kol_db", "kol_analisa", "bandingkan", "mapping", "approval", "campaign", "ro",
+                     "kalender", "timeline", "report", "bukti"],
+    "manager": ["dashboard", "approval", "campaign", "ro", "report"],
+    "finance": ["dashboard", "pembayaran", "ro", "bukti", "report"],
+    "store": ["dashboard", "kalender", "timeline", "report", "bukti", "request_toko", "akun"],
+    "super_user": ["dashboard", "social", "performa", "upload_traffic", "kol_db", "kol_analisa", "bandingkan", "mapping", "campaign",
+                   "seleksi", "draft", "approval", "ro", "kalender", "timeline", "brief", "report", "bukti", "pembayaran",
+                   "request_toko", "request_approval", "model", "akses", "akun"],
 }
 CASES = [(r, p) for r, ps in ROLE_PAGES.items() for p in ps]
 

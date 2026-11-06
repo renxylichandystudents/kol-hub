@@ -24,6 +24,7 @@ pay = db.df("""SELECT p.id, p.invoice_no, p.nominal, p.pajak_jenis, p.pajak_nomi
                FROM payments p JOIN ro_forms r ON r.id=p.ro_id JOIN submissions s ON s.id=r.submission_id
                LEFT JOIN campaigns c ON c.id=s.campaign_id JOIN submission_items i ON i.id=p.item_id
                JOIN kol_accounts k ON k.id=i.kol_id JOIN stores st ON st.id=i.store_id JOIN zones z ON z.id=st.zone_id
+               LEFT JOIN posts po ON po.item_id=p.item_id
                ORDER BY p.created_at DESC""")
 if pay.empty:
     st.info("Belum ada pembayaran. Baris pembayaran dibuat otomatis saat pengajuan disetujui Manager.")
