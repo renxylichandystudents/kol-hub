@@ -125,3 +125,26 @@ def test_check_constraints_detects_violation():
     c = _cands()[:3]
     res = check_constraints(c, Constraints(budget=1, jumlah_kol=3))
     assert not res["budget"] and not res["semua"]
+
+
+def test_optimizer_handles_missing_values():
+    """Data dari pandas bisa berisi NaN (KOL tanpa histori/harga) — solver tidak boleh crash."""
+    nan = float("nan")
+    cands = _cands()
+    cands[0].expected_visits = nan          # belum ada histori lift
+    cands[1].harga = nan                    # harga belum diketahui → tidak boleh dipilih
+    cands[2].skor = nan                     # skor belum dihitung → dianggap 0 (tidak layak)
+    r = solve(cands, Constraints(budget=50e6, jumlah_kol=4))
+    assert r["status"] == "optimal" and r["cek"]["semua"], r
+    keys = {c.key for c in r["terpilih"]}
+    assert cands[1].key not in keys and cands[2].key not in keys
+
+
+def test_finite_helpers():
+    from lib.optimize import _min_finite, finite
+    nan = float("nan")
+    assert finite(nan, None, 0, 5) == 5
+    assert finite(nan, default=300) == 300
+    assert _min_finite(nan, 8e6, default=1) == 8e6
+    assert _min_finite(12e6, 9e6) == 9e6
+    assert _min_finite(nan, None, default=7) == 7

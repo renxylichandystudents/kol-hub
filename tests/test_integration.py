@@ -46,8 +46,10 @@ def test_full_submission_flow(db_ready):
         W.add_item(U["finance"], sub, kols[2]["id"], stores[0]["id"], None, None)      # finance tidak boleh
     W.submit(U["ecommerce"], sub)
     assert db.scalar("SELECT status FROM submissions WHERE id=%s", (sub,)) == "Review Asisten Manager"
+    with pytest.raises(W.WorkflowError):
+        W.decide(U["manager"], sub, 2, {i1: ("setuju", None), i2: ("setuju", None)})  # Manager belum giliran (masih level 1)
     with pytest.raises(Forbidden):
-        W.decide(U["manager"], sub, 2, {i1: ("setuju", None), i2: ("setuju", None)})  # level salah
+        W.decide(U["manager"], sub, 1, {i1: ("setuju", None), i2: ("setuju", None)})  # Manager tidak berhak level 1
     with pytest.raises(W.WorkflowError):
         W.decide(U["asst_manager"], sub, 1, {i1: ("setuju", None), i2: ("tolak", "")})  # catatan wajib
     W.decide(U["asst_manager"], sub, 1, {i1: ("setuju", None), i2: ("tolak", "audiens tidak relevan")})
@@ -141,6 +143,8 @@ def test_jobs_and_gates(db_ready):
     assert db.scalar("SELECT COUNT(*) FROM model_runs") >= 8
     assert db.scalar("SELECT COUNT(*) FROM predictions WHERE tipe='skor'") > 40
     gates = {r["model"]: r["gate"] for r in db.query("SELECT DISTINCT ON (model) model, gate FROM model_runs ORDER BY model, dijalankan DESC")}
-    print("GATES", gates)
+    errors = {r["model"]: r["metrik_json"] for r in db.query("SELECT model, metrik_json FROM model_runs WHERE metrik_json ? 'error'")}
+    print("GATES", gates, "ERRORS", errors)
+    assert not errors, f"Fungsi gate crash: {errors}"
     assert gates.get("Optimasi budget") == "lulus"
     assert gates.get("Sentimen komentar") == "lulus"

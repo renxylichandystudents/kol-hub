@@ -13,8 +13,31 @@ Solver: OR-Tools CP-SAT; bila paket tidak tersedia dipakai branch-and-bound sede
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from itertools import combinations
+
+
+def finite(*values, default: float = 0.0) -> float:
+    """Nilai pertama yang berupa angka hingga (bukan None/NaN/inf) dan > 0; selain itu `default`.
+
+    Catatan: NaN bernilai True di Python, sehingga pola `x or default` tidak menangkap NaN dari pandas.
+    """
+    for v in values:
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(f) and f > 0:
+            return f
+    return default
+
+
+def _min_finite(*values, default: float = 0.0) -> float:
+    """Minimum dari nilai yang valid (abaikan None/NaN); `default` bila tidak ada."""
+    ok = [finite(v, default=-1) for v in values]
+    ok = [v for v in ok if v > 0]
+    return min(ok) if ok else default
 
 
 @dataclass
@@ -57,7 +80,17 @@ def _marginals(cands: list[Candidate], gamma: float) -> dict[str, float]:
 
 
 def eligible(cands: list[Candidate]) -> list[Candidate]:
-    return [c for c in cands if not c.diblokir and c.skor >= 50]
+    """Kandidat yang boleh dipilih: tidak diblokir, skor ≥ 50, dan harga valid.
+    Ê kunjungan yang kosong/NaN dianggap 0 agar solver tidak gagal."""
+    out = []
+    for c in cands:
+        skor = c.skor if c.skor is not None and math.isfinite(c.skor) else 0.0
+        if c.diblokir or skor < 50 or not (c.harga and math.isfinite(c.harga) and c.harga > 0):
+            continue
+        if c.expected_visits is None or not math.isfinite(c.expected_visits):
+            c.expected_visits = 0.0
+        out.append(c)
+    return out
 
 
 def check_constraints(selected: list[Candidate], cons: Constraints) -> dict:

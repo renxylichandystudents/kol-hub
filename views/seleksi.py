@@ -9,7 +9,7 @@ from lib import auth, db, ui
 from lib import formulas as F
 from lib import workflow as W
 from lib.master import KATEGORI, KATEGORI_LABEL
-from lib.optimize import Candidate, Constraints, solve
+from lib.optimize import Candidate, Constraints, _min_finite, finite, solve
 from lib.rbac import require
 
 user = auth.current_user()
@@ -127,8 +127,10 @@ with tab_gen:
     zmin, zmax = g3.slider("Porsi biaya per zona", 0, 100, (0 if len(set(stores[stores['id'].isin(sel_ids)]['zona'])) < 2 else 10, 70), step=5)
     wajib = g4.multiselect("Toko wajib ≥ 1 KOL", sf, default=sf[: min(len(sf), int(n_kol))])
     if st.button("Jalankan generator", type="primary", disabled=cand.empty):
-        cs = [Candidate(f"{r.id}:{r.store_id}", int(r.id), int(r.store_id), r.zona, float(min(r.harga, r.batas_nego) or r.harga_wajar or 1),
-                        float(r.prediksi_kunjungan), float(r.skor), r.status != "aktif") for r in cand.itertuples()]
+        cs = [Candidate(f"{r.id}:{r.store_id}", int(r.id), int(r.store_id), r.zona,
+                        _min_finite(r.harga, r.batas_nego, default=finite(r.harga_wajar, default=0.0)),
+                        finite(r.prediksi_kunjungan, default=0.0), finite(r.skor, default=0.0), r.status != "aktif")
+              for r in cand.itertuples()]
         cons = Constraints(budget=float(budget), jumlah_kol=int(n_kol), wajib_toko=[int(stores[stores["nama"] == s]["id"].iloc[0]) for s in wajib],
                            zona_min=zmin / 100, zona_maks=zmax / 100)
         st.session_state["gen_result"] = solve(cs, cons)

@@ -361,14 +361,16 @@ def gate_category() -> dict:
 
 
 def gate_optimizer() -> dict:
-    from .optimize import Candidate, Constraints, solve
+    from .optimize import Candidate, Constraints, finite, solve
     kt = A.kol_table()
     needs = A.store_needs().head(8)
     cands = []
     for _, s in needs.iterrows():
         for _, r in kt.head(25).iterrows():
-            cands.append(Candidate(f"{r['id']}:{s['store_id']}", int(r["id"]), int(s["store_id"]), s["zona"], float(r["harga"] or 1e6),
-                                   float((r["extra_hist"] or 300) * (0.5 + r["audiens_lokal"])), float(r["skor"]), r["status"] != "aktif"))
+            visits = finite(r["extra_hist"], default=300) * (0.5 + finite(r["audiens_lokal"], default=0.0))
+            cands.append(Candidate(f"{r['id']}:{s['store_id']}", int(r["id"]), int(s["store_id"]), s["zona"],
+                                   finite(r["harga"], r["harga_wajar"], default=1e6), visits,
+                                   finite(r["skor"], default=0.0), r["status"] != "aktif"))
     sims, ok = 0, 0
     for budget, n in [(60e6, 5), (90e6, 7), (40e6, 4)]:
         cons = Constraints(budget=budget, jumlah_kol=n, wajib_toko=list(needs["store_id"].head(2)), zona_min=0.0, zona_maks=0.7)
