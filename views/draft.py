@@ -68,6 +68,10 @@ pred = items["prediksi_json"].apply(lambda p: p if isinstance(p, dict) else {})
 items["saran_harga"] = pred.map(lambda p: p.get("harga_wajar"))
 items["batas_nego"] = pred.map(lambda p: p.get("batas_nego"))
 items["kunjungan"] = pred.map(lambda p: p.get("kunjungan") or 0)
+# Nilai dari JSON/NUMERIC bisa None/Decimal → jadikan angka (None → NaN) agar perbandingan & penjumlahan aman
+for _c in ("ratecard", "harga_nego", "saran_harga", "batas_nego", "kunjungan", "skor_saat_itu"):
+    items[_c] = pd.to_numeric(items[_c], errors="coerce")
+items["kunjungan"] = items["kunjungan"].fillna(0)
 items["kunj_rng"] = pred.map(lambda p: f"+{F.angka(p.get('kunjungan_low', 0))} – {F.angka(p.get('kunjungan_high', 0))}" if p else "—")
 
 st.markdown("#### Baris pengajuan")
