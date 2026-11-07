@@ -66,7 +66,10 @@ Paket sistem (`packages.txt`): Tesseract OCR untuk membaca angka insight dari sc
 pip install -r requirements.txt pytest
 DATABASE_URL=postgresql://... python -m pytest -q tests   # tanpa DATABASE_URL: hanya uji unit & pipeline
 ```
-CI GitHub Actions menjalankan semua uji pada PostgreSQL 16 di setiap push.
+CI GitHub Actions menjalankan semua uji pada PostgreSQL 16 dan Python 3.14 (sama dengan server) di setiap push dan setiap hari.
+Workflow **Cek app live** membuka app setiap 6 jam: membangunkannya bila tidur dan gagal (merah) bila halaman login error.
+
+Versi paket di `requirements.txt` dikunci persis seperti yang lolos uji — upgrade hanya lewat perubahan file itu + CI hijau.
 
 ## Catatan
 
