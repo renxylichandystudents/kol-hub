@@ -46,15 +46,18 @@ st.markdown(f"**{ui.esc(s['nama'] or 'Pengajuan tunggal')}** · {s['no_campaign'
 if s["submitted_by"] == user["id"]:
     st.warning("Anda yang mengajukan pengajuan ini — keputusan harus diambil approver lain (segregation of duties).")
 
-items = db.df("""SELECT i.id, k.username, k.platform, k.status AS kol_status, st.nama AS toko, z.nama AS zona, i.deliverable, i.tanggal_posting,
+items = db.df("""SELECT i.id, i.kol_id, i.store_id, k.username, k.platform, k.status AS kol_status, st.nama AS toko, z.nama AS zona, i.deliverable, i.tanggal_posting,
                         i.ratecard, i.harga_nego, i.skor_saat_itu, i.prediksi_json, i.revisi_aksi, i.keputusan_item, i.catatan_item
                  FROM submission_items i JOIN kol_accounts k ON k.id=i.kol_id JOIN stores st ON st.id=i.store_id JOIN zones z ON z.id=st.zone_id
                  WHERE i.submission_id=%s AND i.aktif ORDER BY z.id, st.nama""", (pick,))
-pred = items["prediksi_json"].apply(lambda p: p if isinstance(p, dict) else {})
+pred = pd.Series(W.item_predictions(items), index=items.index, dtype=object)
 items["batas"] = pred.map(lambda p: p.get("batas_nego"))
 items["wajar"] = pred.map(lambda p: p.get("harga_wajar"))
 items["kunj"] = pred.map(lambda p: p.get("kunjungan") or 0)
 items["terbatas"] = pred.map(lambda p: bool(p.get("data_terbatas")))
+for _c in ("ratecard", "harga_nego", "skor_saat_itu", "batas", "wajar", "kunj"):
+    items[_c] = pd.to_numeric(items[_c], errors="coerce")
+items["kunj"] = items["kunj"].fillna(0)
 
 # ---------------------------------------------------------------- analisa untuk approver
 total, kunj = items["harga_nego"].sum(), items["kunj"].sum()

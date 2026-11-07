@@ -102,6 +102,21 @@ def item_prediction(kol_id: int, store_id: int) -> dict:
             "kunjungan_high": round(extra * 1.3), "audiens_lokal": float(r["audiens_lokal"]), "data_terbatas": bool(r["data_terbatas"])}
 
 
+def item_predictions(items) -> list[dict]:
+    """Prediksi per baris pengajuan. Pakai `prediksi_json` yang tersimpan saat KOL dimasukkan;
+    bila kosong (mis. data contoh/impor lama), hitung ulang dari skor & lift terkini."""
+    out = []
+    for r in items.itertuples(index=False):
+        p = r.prediksi_json if isinstance(r.prediksi_json, dict) else {}
+        if not p.get("kunjungan") and not p.get("harga_wajar"):
+            try:
+                p = {**item_prediction(int(r.kol_id), int(r.store_id)), **{k: v for k, v in p.items() if v is not None}}
+            except Exception:  # prediksi bersifat pendukung — jangan sampai layar gagal
+                p = p or {}
+        out.append(p)
+    return out
+
+
 def add_item(user: dict, submission_id: int, kol_id: int, store_id: int, deliverable: str | None, tanggal: date | None,
              harga: float | None = None) -> int:
     require(user["role"], "campaign.edit")

@@ -64,7 +64,7 @@ if items.empty:
             ui.go("views/seleksi.py", sel_campaign=int(s["campaign_id"]))
     st.stop()
 
-pred = items["prediksi_json"].apply(lambda p: p if isinstance(p, dict) else {})
+pred = pd.Series(W.item_predictions(items), index=items.index, dtype=object)
 items["saran_harga"] = pred.map(lambda p: p.get("harga_wajar"))
 items["batas_nego"] = pred.map(lambda p: p.get("batas_nego"))
 items["kunjungan"] = pred.map(lambda p: p.get("kunjungan") or 0)
@@ -94,10 +94,15 @@ ed = st.data_editor(tbl, hide_index=True, use_container_width=True,
                         "Aksi revisi": st.column_config.SelectboxColumn(options=["pilih…", "pertahankan", "ganti", "hapus"])},
                     key=f"draft_{pick}")
 
-changed = []
-for i, (orig, new) in enumerate(zip(tbl.itertuples(index=False), ed.itertuples(index=False))):
-    if orig != new:
-        changed.append(i)
+def _same(a, b) -> bool:
+    """Bandingkan dua sel; dua nilai kosong (None/NaN/NaT) dianggap sama."""
+    if pd.isna(a) and pd.isna(b):
+        return True
+    return a == b
+
+
+changed = [i for i in range(len(tbl))
+           if any(not _same(tbl.iloc[i][c], ed.iloc[i][c]) for c in editable_cols if c in tbl.columns)]
 c1, c2 = st.columns([1, 3])
 if c1.button("Simpan perubahan", disabled=not changed):
     try:
@@ -108,6 +113,8 @@ if c1.button("Simpan perubahan", disabled=not changed):
             if act == "hapus":
                 W.remove_item(user, iid)
                 continue
+            if pd.isna(row["Harga nego"]):
+                raise W.WorkflowError(f"Harga nego baris {i + 1} ({row['KOL']}) belum diisi.")
             W.update_item(user, iid, dicentang=bool(row["✓"]), harga_nego=float(row["Harga nego"]), tanggal_posting=row["Tanggal tayang"],
                           deliverable=row["Deliverable"], **({"revisi_aksi": act} if act in ("pertahankan", "ganti") else {}))
         st.session_state["flash_ok"] = "Perubahan disimpan."

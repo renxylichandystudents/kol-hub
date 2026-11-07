@@ -148,3 +148,19 @@ def test_jobs_and_gates(db_ready):
     assert not errors, f"Fungsi gate crash: {errors}"
     assert gates.get("Optimasi budget") == "lulus"
     assert gates.get("Sentimen komentar") == "lulus"
+
+
+def test_item_predictions_fill_empty(db_ready):
+    """Baris tanpa prediksi tersimpan (data contoh) tetap mendapat prediksi kunjungan & harga wajar."""
+    import pandas as pd
+    from lib import db
+    from lib import workflow as W
+    rows = db.df("""SELECT i.kol_id, i.store_id, '{}'::jsonb AS prediksi_json FROM submission_items i
+                    JOIN kol_accounts k ON k.id=i.kol_id WHERE k.status='aktif' LIMIT 3""")
+    preds = W.item_predictions(rows)
+    assert len(preds) == len(rows) > 0
+    assert all(p.get("kunjungan", 0) > 0 and p.get("harga_wajar", 0) > 0 for p in preds), preds
+    # prediksi yang sudah tersimpan tidak ditimpa
+    kept = W.item_predictions(pd.DataFrame([{"kol_id": rows.iloc[0]["kol_id"], "store_id": rows.iloc[0]["store_id"],
+                                             "prediksi_json": {"kunjungan": 123, "harga_wajar": 5e6}}]))
+    assert kept[0]["kunjungan"] == 123
