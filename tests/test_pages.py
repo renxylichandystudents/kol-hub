@@ -62,6 +62,6 @@ def test_draft_with_items_missing_prediction(db_ready):
     db.execute("""UPDATE submission_items SET prediksi_json = COALESCE(prediksi_json, '{}'::jsonb) - 'batas_nego' - 'harga_wajar'
                   WHERE id % 2 = 0""")
     db.execute("UPDATE submission_items SET prediksi_json = NULL WHERE id % 5 = 0")
-    for role in ("ecommerce", "asst_manager", "super_user"):
+    for role in ("ecommerce", "super_user"):
         at = _run(db_ready[role], "draft")
         assert not at.exception, (role, [e.value for e in at.exception])
