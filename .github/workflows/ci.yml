@@ -4,6 +4,8 @@ on:
     branches: ["**"]
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: "17 22 * * *"   # setiap hari 05.17 WIB: pastikan algoritma & layar tetap lolos uji
 
 jobs:
   test:
@@ -23,10 +25,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"   # sama dengan server Streamlit Community Cloud
           cache: pip
       - run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
       - run: pip install -r requirements.txt pytest
+      - name: Versi paket terpasang
+        run: pip freeze
       - name: Unit, integrasi & uji layar per role (C.9)
         run: python -m pytest -q -rA tests 2>&1 | tail -150
         shell: bash
