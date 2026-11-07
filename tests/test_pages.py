@@ -65,3 +65,21 @@ def test_draft_with_items_missing_prediction(db_ready):
     for role in ("ecommerce", "super_user"):
         at = _run(db_ready[role], "draft")
         assert not at.exception, (role, [e.value for e in at.exception])
+
+
+def test_ro_page_for_every_ro(db_ready):
+    """Layar Form RO harus terbuka untuk semua RO — termasuk yang belum punya scan bertanda tangan (scan_nama kosong)."""
+    from streamlit.testing.v1 import AppTest
+
+    from lib import db
+    ro_ids = [r["id"] for r in db.query("SELECT id FROM ro_forms ORDER BY id")]
+    assert any(db.scalar("SELECT scan_nama FROM ro_forms WHERE id=%s", (i,)) is None for i in ro_ids), "perlu RO tanpa scan"
+    for rid in ro_ids:
+        at = AppTest.from_file(APP, default_timeout=180)
+        at.session_state["user"] = dict(db_ready["ecommerce"])
+        at.session_state["_jobs_checked"] = True
+        at.session_state["sel_ro"] = rid
+        at.run()
+        at.switch_page("views/ro.py")
+        at.run()
+        assert not at.exception, (rid, [e.value for e in at.exception])

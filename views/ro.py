@@ -49,7 +49,17 @@ ui.kpis([{"label": "No. RO", "value": ro["no_ro"], "sub": f"ref. {ro['no_pengaju
          {"label": "Status RO", "value": ro["status"].title(), "sub": f"pengajuan: {ro['sub_status']}"},
          {"label": "Kode verifikasi", "value": ro["kode_verifikasi"], "sub": "tercetak pada dokumen"}])
 st.write("")
-st.dataframe(pd.DataFrame(items), hide_index=True, use_container_width=True, column_config={
+tbl = pd.DataFrame(items)
+if not tbl.empty:
+    for _c in ("harga_nego", "pajak_nominal"):
+        tbl[_c] = pd.to_numeric(tbl[_c], errors="coerce")
+    for _c in ("pajak_jenis", "invoice_no", "bayar"):
+        tbl[_c] = tbl[_c].fillna("—")
+    tbl["tanggal_posting"] = pd.to_datetime(tbl["tanggal_posting"]).dt.strftime("%d %b %Y")
+    tbl = tbl.rename(columns={"kol_nama": "KOL / Portal", "username": "Akun", "platform": "Platform", "toko": "Toko",
+                              "deliverable": "Deliverable", "tanggal_posting": "Tanggal tayang", "pajak_jenis": "Jenis pajak",
+                              "invoice_no": "No. invoice", "bayar": "Status bayar"})
+st.dataframe(tbl, hide_index=True, use_container_width=True, column_config={
     "harga_nego": st.column_config.NumberColumn("Harga", format="Rp %d"), "pajak_nominal": st.column_config.NumberColumn("Pajak", format="Rp %d")})
 st.markdown("**Jejak approval:** " + (" · ".join(f"Level {a['level']} {a['keputusan']} oleh {a['nama'] or '—'} ({a['waktu']:%d/%m/%Y})"
                                                 for a in approvals) or "—"))
@@ -60,9 +70,11 @@ if b1.download_button("Unduh PDF untuk dicetak", pdf, file_name=f"{ro['no_ro']}.
                       use_container_width=True, disabled=not can(user["role"], "ro.view")):
     if can(user["role"], "ro.manage"):
         W.mark_ro_printed(user, pick, pdf)
-if ro["scan_nama"]:
+scan_nama = ro["scan_nama"] if isinstance(ro["scan_nama"], str) and ro["scan_nama"].strip() else None  # NaN dari pandas = belum ada scan
+if scan_nama:
     scan = db.scalar("SELECT scan_ttd FROM ro_forms WHERE id=%s", (pick,))
-    b2.download_button("Unduh scan bertanda tangan", scan or b"", file_name=ro["scan_nama"], use_container_width=True)
+    if scan:
+        b2.download_button("Unduh scan bertanda tangan", bytes(scan), file_name=scan_nama, use_container_width=True)
 
 if can(user["role"], "ro.manage") and ro["status"] != "ditandatangani":
     st.markdown("#### Unggah scan bertanda tangan")
