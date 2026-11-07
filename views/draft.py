@@ -103,48 +103,52 @@ def _same(a, b) -> bool:
 
 changed = [i for i in range(len(tbl))
            if any(not _same(tbl.iloc[i][c], ed.iloc[i][c]) for c in editable_cols if c in tbl.columns)]
-c1, c2 = st.columns([1, 3])
-if c1.button("Simpan perubahan", disabled=not changed):
-    try:
-        for i in changed:
-            iid = int(items.iloc[i]["id"])
-            row = ed.iloc[i]
-            act = row.get("Aksi revisi") if "Aksi revisi" in ed else None
-            if act == "hapus":
-                W.remove_item(user, iid)
-                continue
-            if pd.isna(row["Harga nego"]):
-                raise W.WorkflowError(f"Harga nego baris {i + 1} ({row['KOL']}) belum diisi.")
-            W.update_item(user, iid, dicentang=bool(row["✓"]), harga_nego=float(row["Harga nego"]), tanggal_posting=row["Tanggal tayang"],
-                          deliverable=row["Deliverable"], **({"revisi_aksi": act} if act in ("pertahankan", "ganti") else {}))
-        st.session_state["flash_ok"] = "Perubahan disimpan."
-        st.rerun()
-    except W.WorkflowError as e:
-        st.error(str(e))
-c2.caption(f"{len(changed)} baris berubah" if changed else "Ubah centang, harga nego, tanggal, atau aksi revisi lalu simpan.")
-
-with st.expander("Ganti / hapus baris"):
-    labels = (items["username"] + " → " + items["toko"]).tolist()
-    target = st.selectbox("Baris", range(len(items)), format_func=lambda i: labels[i])
-    row = items.iloc[target]
-    rec = A.recommend_for_store(int(row["store_id"]), k=8, seed=int(row["store_id"]))
-    rec = rec[~rec["id"].isin(items["kol_id"])] if not rec.empty else rec
-    g1, g2 = st.columns([3, 1])
-    if not rec.empty:
-        alt = g1.selectbox("Ganti dengan", rec["id"].tolist(),
-                           format_func=lambda k: (lambda r: f"{r['username']} · skor {r['skor']:.0f} · {F.rupiah(r['harga_wajar'])}")(rec.set_index('id').loc[k]))
-        if g2.button("Ganti", use_container_width=True):
-            try:
-                W.replace_item(user, int(row["id"]), int(alt))
-                st.rerun()
-            except W.WorkflowError as e:
-                st.error(str(e))
-    if st.button("Hapus baris ini"):
+if editable:
+    c1, c2 = st.columns([1, 3])
+    if c1.button("Simpan perubahan", disabled=not changed):
         try:
-            W.remove_item(user, int(row["id"]))
+            for i in changed:
+                iid = int(items.iloc[i]["id"])
+                row = ed.iloc[i]
+                act = row.get("Aksi revisi") if "Aksi revisi" in ed else None
+                if act == "hapus":
+                    W.remove_item(user, iid)
+                    continue
+                if pd.isna(row["Harga nego"]):
+                    raise W.WorkflowError(f"Harga nego baris {i + 1} ({row['KOL']}) belum diisi.")
+                W.update_item(user, iid, dicentang=bool(row["✓"]), harga_nego=float(row["Harga nego"]), tanggal_posting=row["Tanggal tayang"],
+                              deliverable=row["Deliverable"], **({"revisi_aksi": act} if act in ("pertahankan", "ganti") else {}))
+            st.session_state["flash_ok"] = "Perubahan disimpan."
             st.rerun()
         except W.WorkflowError as e:
             st.error(str(e))
+    c2.caption(f"{len(changed)} baris berubah" if changed else "Ubah centang, harga nego, tanggal, atau aksi revisi lalu simpan.")
+
+    with st.expander("Ganti / hapus baris"):
+        labels = (items["username"] + " → " + items["toko"]).tolist()
+        target = st.selectbox("Baris", range(len(items)), format_func=lambda i: labels[i])
+        row = items.iloc[target]
+        rec = A.recommend_for_store(int(row["store_id"]), k=8, seed=int(row["store_id"]))
+        rec = rec[~rec["id"].isin(items["kol_id"])] if not rec.empty else rec
+        g1, g2 = st.columns([3, 1])
+        if not rec.empty:
+            alt = g1.selectbox("Ganti dengan", rec["id"].tolist(),
+                               format_func=lambda k: (lambda r: f"{r['username']} · skor {r['skor']:.0f} · {F.rupiah(r['harga_wajar'])}")(rec.set_index('id').loc[k]))
+            if g2.button("Ganti", use_container_width=True):
+                try:
+                    W.replace_item(user, int(row["id"]), int(alt))
+                    st.rerun()
+                except W.WorkflowError as e:
+                    st.error(str(e))
+        if st.button("Hapus baris ini"):
+            try:
+                W.remove_item(user, int(row["id"]))
+                st.rerun()
+            except W.WorkflowError as e:
+                st.error(str(e))
+else:
+    st.info(f"Pengajuan berstatus **{s['status']}** — baris tidak dapat diubah. "
+            "Perubahan hanya bisa dilakukan saat status Draft, Revisi, atau Ditolak.")
 
 # ---------------------------------------------------------------- analisa singkat
 chk = items[items["dicentang"]]
@@ -184,11 +188,12 @@ st.dataframe(chk.groupby("zona").agg(Toko=("toko", "nunique"), KOL=("id", "count
              hide_index=True, use_container_width=True,
              column_config={"Total": st.column_config.NumberColumn(format="Rp %d"), "Prediksi": st.column_config.NumberColumn("Prediksi kunjungan", format="%d")})
 
-label = "Ajukan 1 file campaign" if s["jenis"] == "grup" else "Ajukan pengajuan tunggal"
-if st.button(label, type="primary", disabled=chk.empty or bool(blocked.shape[0])):
-    try:
-        W.submit(user, pick)
-        st.session_state["flash_ok"] = f"{s['no_pengajuan']} diajukan ke Asisten Manager."
-        st.switch_page("views/campaign.py")
-    except W.WorkflowError as e:
-        st.error(str(e))
+if editable:
+    label = "Ajukan 1 file campaign" if s["jenis"] == "grup" else "Ajukan pengajuan tunggal"
+    if st.button(label, type="primary", disabled=chk.empty or bool(blocked.shape[0])):
+        try:
+            W.submit(user, pick)
+            st.session_state["flash_ok"] = f"{s['no_pengajuan']} diajukan ke Asisten Manager."
+            st.switch_page("views/campaign.py")
+        except W.WorkflowError as e:
+            st.error(str(e))
