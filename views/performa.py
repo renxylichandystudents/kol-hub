@@ -137,8 +137,8 @@ for i in range(0, len(zt), 5):
         c.markdown(
             f"<div class='kh-card'><div class='kh-kpi-l'>{ui.esc(r['zona'])} · {int(r['toko'])} toko</div>"
             f"<div class='kh-kpi-v' style='font-size:1.3rem'>{F.angka(r['traffic'])}</div>"
-            f"<div class='kh-kpi-s'>traffic offline 4 mgg · {F.persen(vs, tanda=True)} vs forecast</div>"
-            f"<div class='kh-kpi-s'>views KOL 90 hr {F.angka(r['views'] or 0)} · lift {F.persen((r['lift'] or 0) * 100, tanda=True) if pd.notna(r['lift']) else '—'}</div></div>",
+            f"<div class='kh-kpi-s'>{ui.red_neg(f'traffic offline 4 mgg · {F.persen(vs, tanda=True)} vs forecast')}</div>"
+            f"<div class='kh-kpi-s'>{ui.red_neg('views KOL 90 hr ' + F.angka(r['views'] or 0) + ' · lift ' + (F.persen((r['lift'] or 0) * 100, tanda=True) if pd.notna(r['lift']) else '—'))}</div></div>",
             unsafe_allow_html=True)
     st.write("")
 

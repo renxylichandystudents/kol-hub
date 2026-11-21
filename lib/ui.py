@@ -32,6 +32,7 @@ section[data-testid="stSidebar"] [data-baseweb="select"] > div{background:#1f2b4
 .kh-card.hl{background:var(--kh-soft);border-color:#c7d6fb}
 .kh-kpi-l{color:var(--kh-muted);font-size:.86rem}.kh-kpi-v{font-size:1.75rem;font-weight:750;line-height:1.25;color:#0f172a}
 .kh-kpi-s{color:var(--kh-muted);font-size:.8rem}
+.kh-kpi-v{white-space:nowrap}
 .kh-kpi-v.pos{color:var(--kh-blue)}.kh-kpi-v.neg{color:var(--kh-red)}
 .kh-kpi-s.neg{color:var(--kh-red);font-weight:600}.kh-kpi-s.pos{color:var(--kh-green);font-weight:600}
 .kh-badge{display:inline-block;padding:.12rem .55rem;border-radius:999px;font-size:.76rem;font-weight:600;white-space:nowrap}
@@ -99,6 +100,63 @@ def number_config(data, column_config: dict | None) -> tuple[dict | None, list]:
     return (cfg or None), to_round
 
 
+def _id_num(v, fmt: str | None = None) -> str:
+    """Format tampilan Indonesia: bilangan bulat bertitik ribuan; persen tanpa desimal."""
+    if v is None or v is pd.NA or (isinstance(v, float) and pd.isna(v)):
+        return "—"
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    if fmt and fmt.endswith("%%"):
+        sign = "+" if "+" in fmt and x > 0 else ""
+        return f"{sign}{round(x)}%"
+    return f"{round(x):,}".replace(",", ".")
+
+
+def styled(data: pd.DataFrame, column_config: dict | None):
+    """Bulatkan & format semua kolom angka (titik ribuan) dan beri warna merah pada nilai minus."""
+    cfg, _ = number_config(data, column_config)
+    cfg = cfg or {}
+    fmts, numeric = {}, []
+    for col in data.columns:
+        c = cfg.get(col)
+        tc = c.get("type_config", {}) if isinstance(c, dict) else {}
+        if isinstance(c, dict) and (tc.get("type") not in ("number", None) or c.get("hidden")):
+            continue  # progress bar, link, checkbox, dsb. dibiarkan
+        if c is None and not (pd.api.types.is_numeric_dtype(data[col].dtype) and not pd.api.types.is_bool_dtype(data[col].dtype)):
+            continue
+        if _skip(col):
+            continue
+        fmt = tc.get("format")
+        if fmt and fmt != "localized" and not fmt.endswith("%%"):
+            continue  # format khusus (mis. %.2f) dipertahankan
+        numeric.append(col)
+        fmts[col] = (lambda f: (lambda v: _id_num(v, f)))(fmt)
+    if not numeric:
+        return data, cfg
+    df = data.copy()
+    for col in numeric:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    sty = df.style.format(fmts, na_rep="—")
+
+    def red(v):
+        try:
+            return "color:#dc2626;font-weight:600" if v is not None and not pd.isna(v) and float(v) < 0 else ""
+        except (TypeError, ValueError):
+            return ""
+    sty = sty.map(red, subset=numeric)
+    # format sudah dari Styler → hapus format angka di column_config agar tidak bentrok
+    for col in numeric:
+        if isinstance(cfg.get(col), dict):
+            c = dict(cfg[col])
+            c["type_config"] = {k: v for k, v in c.get("type_config", {}).items() if k != "format"}
+            cfg[col] = c
+        else:
+            cfg.pop(col, None)
+    return sty, cfg
+
+
 def _round_cols(data, cols):
     if not isinstance(data, pd.DataFrame) or not cols:
         return data
@@ -113,20 +171,28 @@ def _round_cols(data, cols):
 
 
 def _wrap(fn, editor: bool = False):
-    if getattr(fn, "_kh_wrapped", False):
-        return fn
-
     def inner(data=None, *args, **kwargs):
         try:
-            cfg, rnd = number_config(data, kwargs.get("column_config"))
-            kwargs["column_config"] = cfg
-            if not editor:  # data_editor: jangan ubah tipe data yang dikembalikan ke kode
-                data = _round_cols(data, rnd)
+            if editor or not isinstance(data, pd.DataFrame):
+                cfg, rnd = number_config(data, kwargs.get("column_config"))
+                kwargs["column_config"] = cfg
+            else:
+                data, cfg = styled(data, kwargs.get("column_config"))
+                kwargs["column_config"] = cfg or None
         except Exception:  # noqa: BLE001 — format gagal tidak boleh menghentikan layar
             pass
+        if not editor:
+            kwargs.setdefault("placeholder", "—")  # sel kosong tampil "—", bukan "None"
         return fn(data, *args, **kwargs)
     inner._kh_wrapped = True
+    inner.__wrapped__ = fn
     return inner
+
+
+def _original(fn):
+    while getattr(fn, "_kh_wrapped", False) and hasattr(fn, "__wrapped__"):
+        fn = fn.__wrapped__
+    return fn
 
 
 def date_range(label: str, default_start: date, default_end: date, key: str, max_value: date | None = None,
@@ -145,8 +211,9 @@ def date_range(label: str, default_start: date, default_end: date, key: str, max
 
 def setup():
     st.markdown(CSS, unsafe_allow_html=True)
-    st.dataframe = _wrap(st.dataframe)
-    st.data_editor = _wrap(st.data_editor, editor=True)
+    # pasang ulang setiap run (bukan hanya sekali) agar versi terbaru selalu dipakai setelah deploy tanpa restart
+    st.dataframe = _wrap(_original(st.dataframe))
+    st.data_editor = _wrap(_original(st.data_editor), editor=True)
 
 
 def esc(x) -> str:
@@ -159,14 +226,24 @@ def header(title: str, subtitle: str | None = None):
         st.markdown(f"<div class='kh-sub'>{esc(subtitle)}</div>", unsafe_allow_html=True)
 
 
+_NEG = re.compile(r"(?<![\w.,])(-\s?(?:Rp\s?)?\d[\d.,]*\s?%?)")
+
+
+def red_neg(text: str) -> str:
+    """Escape teks lalu warnai merah setiap angka minus (mis. -4%, -1.234)."""
+    return _NEG.sub(r"<span style='color:#dc2626;font-weight:600'>\1</span>", esc(text))
+
+
 def kpis(items: list[dict]):
     cols = st.columns(len(items))
     for c, it in zip(cols, items):
-        tone = it.get("tone", "")
+        val = str(it["value"])
+        tone = it.get("tone", "") or ("neg" if val.strip().startswith(("-", "−")) else "")
+        size = "" if len(val) <= 11 else " style='font-size:1.25rem'" if len(val) <= 17 else " style='font-size:1.05rem'"
         c.markdown(
             f"<div class='kh-card {'hl' if it.get('highlight') else ''}'><div class='kh-kpi-l'>{esc(it['label'])}</div>"
-            f"<div class='kh-kpi-v {tone}'>{esc(it['value'])}</div>"
-            f"<div class='kh-kpi-s {it.get('sub_tone', '')}'>{esc(it.get('sub', ''))}</div></div>",
+            f"<div class='kh-kpi-v {tone}'{size}>{esc(val)}</div>"
+            f"<div class='kh-kpi-s {it.get('sub_tone', '')}'>{red_neg(it.get('sub', ''))}</div></div>",
             unsafe_allow_html=True)
 
 
