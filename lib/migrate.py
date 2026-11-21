@@ -10,9 +10,15 @@ from . import db
 MIG_DIR = Path(__file__).resolve().parents[1] / "migrations"
 
 
-@st.cache_resource(show_spinner="Menyiapkan database (sekali saja)…")
 def ensure_schema(url: str) -> dict:
-    """Jalankan migrasi yang belum diterapkan. Di-cache per proses agar hanya sekali."""
+    """Jalankan migrasi yang belum diterapkan. Kunci cache = daftar file migrasi, sehingga file migrasi baru
+    (setelah deploy ulang tanpa restart proses) tetap dijalankan."""
+    files = tuple(sorted(f.name for f in MIG_DIR.glob("*.sql")))
+    return _ensure_schema(url, files)
+
+
+@st.cache_resource(show_spinner="Menyiapkan database (sekali saja)…")
+def _ensure_schema(url: str, files: tuple) -> dict:
     applied_now = []
     with db.conn() as c, c.cursor() as cur:
         cur.execute("SELECT pg_advisory_lock(424242)")
