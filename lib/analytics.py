@@ -13,7 +13,7 @@ from . import db
 from . import formulas as F
 from .preprocess import normalize_text
 
-TTL = 300
+TTL = 6 * 3600  # data hanya berubah lewat upload/aksi, yang semuanya memanggil st.cache_data.clear()
 # Fallback biaya per 1.000 views bila belum ada data sendiri — dikalibrasi dari realisasi KOL Mitra10 Nov 2026
 # (median budget ÷ avg views ≈ Rp 18–19 rb). Begitu ada ≥ 3 sampel, CPM_target dihitung dari data sendiri.
 DEFAULT_CPM = {"comedy": 20_000, "beauty": 22_000, "lifestyle": 19_000, "culinary": 19_000, "general": 18_000, "portal": 15_000}
@@ -206,17 +206,39 @@ def store_clusters(k: int = 6) -> dict[int, int]:
     return {int(s): int(c) for s, c in zip(X.index, lab)}
 
 
+@st.cache_data(ttl=TTL, show_spinner=False)
+def _store_zones() -> pd.DataFrame:
+    return db.df("SELECT id, zone_id FROM stores")
+
+
+@st.cache_data(ttl=TTL, show_spinner=False)
+def _traffic_wide() -> pd.DataFrame:
+    """Matriks tanggal × toko (kunjungan; hari 'event' dikosongkan) — dipakai berulang oleh perhitungan lift."""
+    t = traffic_daily()
+    if t.empty:
+        return pd.DataFrame()
+    t = t[t["flag"].ne("event") | t["flag"].isna()]
+    return t.pivot_table(index="tanggal", columns="store_id", values="kunjungan", aggfunc="sum").sort_index()
+
+
+@st.cache_data(ttl=TTL, show_spinner=False)
+def _item_dates() -> tuple:
+    items = campaign_items()
+    if items.empty:
+        return np.array([], dtype="datetime64[ns]"), np.array([], dtype=int)
+    it = items.dropna(subset=["tanggal_posting"])
+    return it["tanggal_posting"].values.astype("datetime64[ns]"), it["store_id"].values.astype(int)
+
+
 def comparators(store_id: int, start: pd.Timestamp, end: pd.Timestamp, n: int = 5) -> list[int]:
     """Toko pembanding: klaster mirip, tidak sedang ber-campaign di jendela waktu."""
     cl = store_clusters()
-    items = campaign_items()
-    busy = set()
-    if not items.empty:
-        win = items[(items["tanggal_posting"] >= start - pd.Timedelta(days=14)) & (items["tanggal_posting"] <= end)]
-        busy = set(win["store_id"])
+    d, sids = _item_dates()
+    lo, hi = np.datetime64(start - pd.Timedelta(days=14), "ns"), np.datetime64(end, "ns")
+    busy = set(sids[(d >= lo) & (d <= hi)].tolist()) if len(d) else set()
     same = [s for s, c in cl.items() if c == cl.get(store_id) and s != store_id and s not in busy]
     if len(same) < 3:
-        st_df = db.df("SELECT id, zone_id FROM stores")
+        st_df = _store_zones()
         z = st_df.loc[st_df["id"] == store_id, "zone_id"].iloc[0]
         same += [int(s) for s in st_df.loc[st_df["zone_id"] == z, "id"] if s != store_id and s not in busy and s not in same]
     if len(same) < 3:
@@ -224,18 +246,27 @@ def comparators(store_id: int, start: pd.Timestamp, end: pd.Timestamp, n: int = 
     return same[:n]
 
 
-@st.cache_data(ttl=TTL, show_spinner=False)
 def lift_for(store_id: int, posting: pd.Timestamp, biaya: float = 0.0, pre_days: int = 28, post_days: int = 14) -> dict:
     """(8) Lift traffic offline DiD bentuk rasio + interval bootstrap 90%; hari 'event' dikeluarkan."""
-    t = traffic_daily()
-    t = t[t["flag"].ne("event") | t["flag"].isna()]
+    w = _traffic_wide()
+    if w.empty:
+        return {"ok": False, "alasan": "data traffic belum cukup"}
+    dates = w.index.values.astype("datetime64[ns]")
+    vals = w.values
+    colpos = {c: i for i, c in enumerate(w.columns)}
     pre_s, pre_e = posting - pd.Timedelta(days=pre_days), posting - pd.Timedelta(days=1)
     post_s, post_e = posting, posting + pd.Timedelta(days=post_days - 1)
     comps = comparators(store_id, pre_s, post_e)
 
     def daily(ids, a, b):
-        x = t[t["store_id"].isin(ids) & (t["tanggal"] >= a) & (t["tanggal"] <= b)]
-        return x.groupby("tanggal")["kunjungan"].sum() / max(len(ids), 1)
+        cols = [colpos[c] for c in ids if c in colpos]
+        if not cols:
+            return pd.Series(dtype=float)
+        r0 = np.searchsorted(dates, np.datetime64(a, "ns"), "left")
+        r1 = np.searchsorted(dates, np.datetime64(b, "ns"), "right")
+        x = vals[r0:r1][:, cols]
+        keep = ~np.isnan(x).all(axis=1)
+        return pd.Series(np.nansum(x[keep], axis=1) / max(len(ids), 1))
 
     sp, so = daily([store_id], pre_s, pre_e), daily([store_id], post_s, post_e)
     cp, co = daily(comps, pre_s, pre_e), daily(comps, post_s, post_e)
@@ -431,9 +462,13 @@ def kol_table(store_id: int | None = None, zone_id: int | None = None) -> pd.Dat
     paid = paid_history()
     paid_by = paid.sort_values("tgl").groupby("kol_id")["harga"].apply(lambda x: list(x.astype(float))).to_dict() if not paid.empty else {}
 
+    empty_p = pd.DataFrame(columns=["views", "umur", "er", "cpm", "telat_hari", "bukti_kurang", "tanggal_posting"])
+    posts_by = {kid: g for kid, g in posts.groupby("kol_id")} if not posts.empty else {}
+    lifts_by = {kid: g for kid, g in lifts.groupby("kol_id")} if not lifts.empty else {}
+    area_by = {kid: g for kid, g in area.groupby("kol_id")} if not area.empty else {}
     rows = []
     for _, r in k.iterrows():
-        kp = posts[posts["kol_id"] == r["id"]] if not posts.empty else pd.DataFrame(columns=["views", "umur", "er", "cpm", "telat_hari", "bukti_kurang"])
+        kp = posts_by.get(r["id"], empty_p)
         q20, q50, q80, n = _views_quantiles(r, kp)
         if n:
             dasar = f"views {n} posting"
@@ -477,11 +512,11 @@ def kol_table(store_id: int | None = None, zone_id: int | None = None) -> pd.Dat
         else:
             lokal = max([v for c, v in aud.items() if c != "Lainnya"] or [0])
         if store_id or zone_id:
-            lvl, area_ket = area_match(area, r["id"], r["kota_domisili"], store_id, target_city, zone_id)
+            lvl, area_ket = area_match(area_by.get(r["id"], area.iloc[0:0]), r["id"], r["kota_domisili"], store_id, target_city, zone_id)
             lokal = max(lokal, AREA_BOBOT.get(lvl, 0.0))
         else:
             lvl, area_ket = None, ""
-        kl = lifts[lifts["kol_id"] == r["id"]] if not lifts.empty else pd.DataFrame()
+        kl = lifts_by.get(r["id"], pd.DataFrame())
         if not kl.empty and store_id and (kl["store_id"] == store_id).any():
             kl_scope = kl[kl["store_id"] == store_id]
         elif not kl.empty and zone_id and (kl["zone_id"] == zone_id).any():

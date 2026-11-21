@@ -14,7 +14,7 @@ from . import db
 MIN_POST = 1
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
 def post_level(start=None, end=None) -> pd.DataFrame:
     """Satu baris per posting tayang (item setuju) + metrik terbaru."""
     d = db.df("""SELECT i.id AS item_id, i.kol_id, k.username_norm AS username, k.nama, k.tipe, k.kategori, k.api_status, i.store_id, st.nama AS toko,
@@ -53,7 +53,7 @@ def post_level(start=None, end=None) -> pd.DataFrame:
     return d
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
 def follower_trend() -> pd.DataFrame:
     return db.df("""SELECT kol_id, tanggal, follower, er, avg_views FROM kol_metrics_snapshot
                     WHERE follower IS NOT NULL OR er IS NOT NULL ORDER BY kol_id, tanggal""")

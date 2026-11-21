@@ -13,7 +13,8 @@ ui.header("Akses & Role", "Super User mendaftarkan akun, mengatur role & cakupan
 ui.flash()
 
 stores, zones = ui.stores(), ui.zones()
-t1, t2, t3, t4, t5 = st.tabs(["Daftarkan akun", "Pengguna", "Riwayat aktivitas", "Matriks hak akses", "Data contoh"])
+t1, t2, t3, t4, t5, t6 = st.tabs(["Daftarkan akun", "Pengguna", "Riwayat aktivitas", "Matriks hak akses", "Data contoh",
+                                   "Diagnostik kecepatan"])
 
 with t1:
     st.caption("Role approver: **Asisten Manager** (level 1) dan **Manager** (level 2). Kata sandi sementara wajib diganti dan 2FA "
@@ -144,3 +145,27 @@ with t5:
         st.cache_data.clear()
         st.session_state["flash_ok"] = "Data contoh dihapus. Silakan upload database KOL & traffic offline yang sebenarnya."
         st.rerun()
+
+
+with t6:
+    import time
+
+    from lib import jobs
+    st.caption("Mengukur waktu bolak-balik app → database. Di atas ±100 ms per query, setiap layar terasa lambat karena "
+               "satu layar menjalankan belasan query; solusinya database di region yang sama dengan server app.")
+    if st.button("Ukur sekarang", icon=":material/speed:"):
+        ts = []
+        for _ in range(5):
+            t0 = time.perf_counter()
+            db.scalar("SELECT 1")
+            ts.append((time.perf_counter() - t0) * 1000)
+        t0 = time.perf_counter()
+        st.cache_data.clear()
+        from lib import analytics as A
+        A.kol_table()
+        full = time.perf_counter() - t0
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Ping database (median)", f"{sorted(ts)[2]:.0f} ms")
+        c2.metric("Hitung ulang skor KOL (tanpa cache)", f"{full:.1f} detik")
+        c3.metric("Job analitik latar", "berjalan" if jobs._BG_LOCK.locked() else "tidak berjalan")
+        st.caption(f"Ping per percobaan: {', '.join(f'{x:.0f}' for x in ts)} ms")

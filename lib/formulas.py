@@ -173,23 +173,27 @@ def did_ratio(store_pre: float, store_post: float, comp_pre: float, comp_post: f
 def did_interval(store_pre: Sequence[float], store_post: Sequence[float],
                  comp_pre: Sequence[float], comp_post: Sequence[float],
                  n_boot: int = 500, level: float = 0.90, seed: int = 7) -> dict:
-    """Bootstrap interval untuk lift DiD (resample minggu)."""
-    rng = random.Random(seed)
+    """Bootstrap interval untuk lift DiD (resample hari/minggu) — divektorkan dengan numpy agar cepat."""
+    import numpy as np
+    rng = np.random.default_rng(seed)
     base = did_ratio(_m(store_pre), _m(store_post), _m(comp_pre), _m(comp_post))
-    lifts, extras = [], []
-    for _ in range(n_boot):
-        sp = [rng.choice(store_pre) for _ in store_pre]
-        so = [rng.choice(store_post) for _ in store_post]
-        cp = [rng.choice(comp_pre) for _ in comp_pre]
-        co = [rng.choice(comp_post) for _ in comp_post]
-        r = did_ratio(_m(sp), _m(so), _m(cp), _m(co))
-        lifts.append(r["lift"])
-        extras.append(r["kunjungan_tambahan"])
+
+    def boot_means(xs):
+        a = np.asarray(list(xs), dtype=float)
+        if a.size == 0:
+            return np.zeros(n_boot)
+        return a[rng.integers(0, a.size, size=(n_boot, a.size))].mean(axis=1)
+
+    sp, so, cp, co = boot_means(store_pre), boot_means(store_post), boot_means(comp_pre), boot_means(comp_post)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        cf = np.where(cp != 0, sp * (co / np.where(cp != 0, cp, 1)), sp)
+        extras = so - cf
+        lifts = np.where(cf != 0, so / np.where(cf != 0, cf, 1) - 1, 0.0)
     lo_q, hi_q = (1 - level) / 2, 1 - (1 - level) / 2
     lifts.sort(); extras.sort()
     base.update({
-        "lift_low": lifts[int(lo_q * (n_boot - 1))], "lift_high": lifts[int(hi_q * (n_boot - 1))],
-        "extra_low": extras[int(lo_q * (n_boot - 1))], "extra_high": extras[int(hi_q * (n_boot - 1))],
+        "lift_low": float(lifts[int(lo_q * (n_boot - 1))]), "lift_high": float(lifts[int(hi_q * (n_boot - 1))]),
+        "extra_low": float(extras[int(lo_q * (n_boot - 1))]), "extra_high": float(extras[int(hi_q * (n_boot - 1))]),
     })
     base["signifikan"] = base["lift_low"] > 0 or base["lift_high"] < 0
     return base

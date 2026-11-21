@@ -52,16 +52,43 @@ def last_run() -> datetime | None:
     return db.scalar("SELECT MAX(dijalankan) FROM model_runs")
 
 
+_BG_LOCK = __import__("threading").Lock()
+
+
+def _run_bg(fn, name: str):
+    """Jalankan job berat di thread latar agar layar tidak tertahan; satu job per proses pada satu waktu."""
+    import threading
+
+    def target():
+        if not _BG_LOCK.acquire(blocking=False):
+            return
+        try:
+            fn()
+        except Exception as e:  # noqa: BLE001
+            print(f"[job {name}] gagal: {e}")
+        finally:
+            _BG_LOCK.release()
+    th = threading.Thread(target=target, name=f"kolhub-{name}", daemon=True)
+    try:
+        from streamlit.runtime.scriptrunner import add_script_run_ctx
+        add_script_run_ctx(th)
+    except Exception:  # noqa: BLE001
+        pass
+    th.start()
+    return th
+
+
 def ensure_fresh():
-    """Dipanggil saat app dibuka: jalankan job bila belum pernah / > 24 jam."""
+    """Dipanggil saat app dibuka: bila job belum pernah / > 24 jam, jalankan di latar (layar tetap bisa dipakai)."""
     if st.session_state.get("_jobs_checked"):
         return
     st.session_state["_jobs_checked"] = True
     lr = last_run()
     pending_nlp = db.scalar("SELECT COUNT(*) FROM social_comments c LEFT JOIN comment_nlp n ON n.comment_id=c.id WHERE n.comment_id IS NULL")
     if lr is None or (datetime.now(timezone.utc) - lr) > timedelta(hours=24) or (pending_nlp or 0) > 0:
-        with st.spinner("Menjalankan job analitik terjadwal (preprocessing, NLP, skor, uji model)…"):
-            run_all()
+        if not _BG_LOCK.locked():
+            _run_bg(run_all, "analitik")
+            st.toast("Job analitik harian berjalan di latar — hasil terbaru muncul beberapa menit lagi.")
 
 
 def run_all() -> dict:

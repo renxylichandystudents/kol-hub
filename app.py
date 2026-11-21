@@ -134,9 +134,10 @@ if not st.session_state.get("_social_checked"):
     try:
         from lib import social_api as S
         if db.scalar("SELECT COUNT(*) FROM api_tokens"):
-            with st.spinner("Sinkron harian Instagram & TikTok…"):
+            def _sync():
                 if any(S.run_daily().values()):
                     st.cache_data.clear()
+            jobs._run_bg(_sync, "sosial")
     except Exception as e:  # noqa: BLE001
         st.warning(f"Sinkron Instagram/TikTok gagal: {e}")
 
