@@ -53,11 +53,12 @@ with m2:
     if not fs.empty:
         long = fs.melt(id_vars=["minggu", "campaign"], value_vars=["aktual", "estimasi"], var_name="seri", value_name="kunjungan")
         lines = alt.Chart(long).mark_line(point=True).encode(
-            x=alt.X("minggu:T", title=None), y=alt.Y("kunjungan:Q", title="Kunjungan/minggu", scale=alt.Scale(zero=False)),
+            x=alt.X("minggu:T", title=None), y=alt.Y("kunjungan:Q", title="Kunjungan/minggu", scale=alt.Scale(zero=False), axis=alt.Axis(format=ui.NUM_AXIS)),
+            tooltip=[alt.Tooltip("minggu:T"), alt.Tooltip("seri:N"), alt.Tooltip("kunjungan:Q", format=ui.NUM_AXIS)],
             color=alt.Color("seri:N", scale=alt.Scale(domain=["aktual", "estimasi"], range=["#1d4ed8", "#94a3b8"]), title=None),
             strokeDash=alt.condition(alt.datum.seri == "estimasi", alt.value([5, 4]), alt.value([0])))
         marks = alt.Chart(fs[fs["campaign"]]).mark_rule(color="#f97316", strokeWidth=2).encode(x="minggu:T")
-        st.altair_chart((marks + lines).properties(height=250), use_container_width=True)
+        st.altair_chart(ui.id_chart((marks + lines).properties(height=250)), use_container_width=True)
         ui.note("Garis oranye = minggu campaign. Estimasi = median musiman 8 minggu sebelumnya (hari campaign & event dikeluarkan).")
 
 st.markdown("#### Analisa dampak campaign terhadap traffic offline")
@@ -84,7 +85,7 @@ else:
 with st.expander("Traffic offline historis (seluruh data)"):
     w = A.weekly([store_id])
     if not w.empty:
-        st.area_chart(w.set_index("minggu")["kunjungan"], height=220)
+        ui.chart(w.set_index("minggu")["kunjungan"], "area", 220, y_title="Kunjungan")
 
 st.markdown("#### KOL / Portal News yang disarankan")
 luas = st.toggle("Perluas ke KOL/portal satu zona (kota lain)", value=False, key="mp_luas",

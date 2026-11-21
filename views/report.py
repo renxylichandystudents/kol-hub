@@ -39,7 +39,7 @@ res["ER"] = [F.engagement_rate(a, b, c, d, v) for a, b, c, d, v in zip(res["like
 res["CPM"] = [F.cpm(b, v) if v else None for b, v in zip(res["biaya"], res["views"])]
 
 tot_b, tot_v, tot_k = res["biaya"].sum(), res["views"].sum(), res["kunjungan_item"].sum(skipna=True)
-ui.kpis([{"label": "Konten tayang", "value": str(len(res)), "sub": f"{res['toko'].nunique()} toko · {res['zona'].nunique()} zona"},
+ui.kpis([{"label": "Konten tayang", "value": F.angka(len(res), False), "sub": f"{res['toko'].nunique()} toko · {res['zona'].nunique()} zona"},
          {"label": "Views", "value": F.angka(tot_v), "sub": f"CPM {F.rupiah(F.cpm(tot_b, tot_v))}"},
          {"label": "Kunjungan tambahan", "value": f"+{F.angka(tot_k)}" if tot_k else "—", "sub": "estimasi DiD dibagi per KOL"},
          {"label": "Biaya", "value": F.rupiah(tot_b), "sub": f"CPIV {F.rupiah(F.cpiv(tot_b, tot_k))}" if tot_k else ""}])

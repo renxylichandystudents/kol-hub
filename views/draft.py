@@ -79,6 +79,7 @@ st.markdown("#### Baris pengajuan")
 tbl = pd.DataFrame({"✓": items["dicentang"], "KOL": items["username"], "Platform": items["platform"], "Toko": items["toko"], "Zona": items["zona"],
                     "Deliverable": items["deliverable"], "Tanggal tayang": pd.to_datetime(items["tanggal_posting"]).dt.date,
                     "Ratecard": items["ratecard"], "Harga nego": items["harga_nego"], "Saran harga": items["saran_harga"],
+                    "Batas nego": items["batas_nego"],
                     "Skor": items["skor_saat_itu"], "Prediksi kunjungan": items["kunj_rng"]})
 if s["status"] == "Revisi":
     tbl["Keputusan"] = items["keputusan_item"].fillna("—")
@@ -89,6 +90,7 @@ ed = st.data_editor(tbl, hide_index=True, use_container_width=True,
                     disabled=True if not editable else [c for c in tbl.columns if c not in editable_cols],
                     column_config={
                         "Ratecard": st.column_config.NumberColumn(format="Rp %d"), "Saran harga": st.column_config.NumberColumn(format="Rp %d"),
+                        "Batas nego": st.column_config.NumberColumn(format="Rp %d", help="Maksimal harga nego — tidak pernah di atas ratecard"),
                         "Harga nego": st.column_config.NumberColumn(format="Rp %d", min_value=0, step=100_000),
                         "Deliverable": st.column_config.SelectboxColumn(options=DELIVERABLES),
                         "Skor": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f"),
@@ -168,7 +170,10 @@ ui.kpis([
 notes = []
 if budget and total > budget:
     notes.append(f"Total melebihi budget {F.rupiah(total - budget)}.")
-for r in over_nego.itertuples():
+over_rc = chk[chk["ratecard"].fillna(0).gt(0) & (chk["harga_nego"] > chk["ratecard"])]
+for r in over_rc.itertuples():
+    notes.append(f"{r.username}: harga nego {F.rupiah(r.harga_nego)} DI ATAS ratecard {F.rupiah(r.ratecard)} — turunkan, ini rugi.")
+for r in over_nego[~over_nego.index.isin(over_rc.index)].itertuples():
     notes.append(f"{r.username}: harga nego {F.rupiah(r.harga_nego)} di atas batas nego {F.rupiah(r.batas_nego)}.")
 low = chk[chk["skor_saat_itu"] < 65]
 for r in low.itertuples():

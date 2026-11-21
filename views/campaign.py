@@ -90,7 +90,7 @@ with tab_new:
             c1, c2, c3 = st.columns(3)
             mulai = c1.date_input("Periode mulai", (pre or {}).get("tanggal") or date.today() + timedelta(days=14))
             selesai = c2.date_input("Periode selesai", mulai + timedelta(days=14))
-            budget = c3.number_input("Budget (Rp)", min_value=0, step=1_000_000, value=60_000_000)
+            budget = ui.num_input("Budget (Rp)", 60_000_000, key="new_camp_budget", container=c3, in_form=True)
             tujuan = st.text_area("Tujuan", placeholder="mis. Menaikkan traffic toko selama promo; target +X kunjungan")
             c4, c5, c6 = st.columns(3)
             jenis = c4.radio("Jenis", ["grup", "tunggal"], horizontal=True, format_func=str.title)

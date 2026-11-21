@@ -135,3 +135,15 @@ def test_format():
     assert F.persen(21.2, tanda=True) == "+21%"
     assert F.percentile_rank(5, [1, 2, 3, 4, 5]) == pytest.approx(90)
     assert not math.isnan(F.percentile_rank(1, []))
+
+
+def test_saran_harga_tidak_melebihi_ratecard():
+    # ratecard lebih murah dari hitungan CPM → saran & batas nego = ratecard (tidak boleh di atas)
+    assert F.cap_ratecard(8_000_000, 10_000_000, 5_000_000) == (5_000_000, 5_000_000)
+    # ratecard lebih mahal → saran tetap dari hitungan, batas nego ≤ ratecard
+    assert F.cap_ratecard(3_000_000, 6_000_000, 5_000_000) == (3_000_000, 5_000_000)
+    # pembulatan tidak boleh menaikkan melewati ratecard
+    w, b = F.cap_ratecard(1_236_000, 1_500_000, 1_236_000)
+    assert w <= 1_236_000 and b <= 1_236_000
+    # tanpa ratecard → hitungan apa adanya (dibulatkan)
+    assert F.cap_ratecard(3_004_000, 3_755_000, None) == (3_000_000, 3_750_000)

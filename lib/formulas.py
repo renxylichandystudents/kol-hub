@@ -104,6 +104,24 @@ def suggest_price(cpm_target: float, v_q50: float, v_q80: float) -> PriceSuggest
     return PriceSuggestion(cpm_target * v_q50 / 1000, cpm_target * v_q80 / 1000)
 
 
+def cap_ratecard(wajar, batas, ratecard):
+    """Saran harga & batas nego tidak boleh melebihi ratecard — membayar di atas harga yang diminta KOL = rugi.
+    Pembulatan ke bawah (kelipatan Rp 10.000) supaya hasil bulat tidak naik melewati ratecard."""
+    def bulat(x):
+        return float(math.floor(x / 10_000) * 10_000) if x and x >= 10_000 else (float(round(x)) if x else x)
+    rc = ratecard if ratecard and ratecard == ratecard and ratecard > 0 else None
+    if rc is not None:
+        wajar = min(wajar, rc) if wajar else wajar
+        batas = min(batas, rc) if batas else rc
+    wajar, batas = bulat(wajar), bulat(batas)
+    if rc is not None:
+        wajar = min(wajar, rc) if wajar else wajar
+        batas = min(batas, rc) if batas else batas
+    if wajar and batas and wajar > batas:
+        wajar = batas
+    return wajar, batas
+
+
 def price_increase_gap(ratecard_lama: float, ratecard_baru: float, views_lama: float, views_baru: float) -> dict:
     """(6) Gap = Δ%ratecard − Δ%V̂ ; tandai bila Gap > 20 poin."""
     d_rc = (ratecard_baru / ratecard_lama - 1) * 100 if ratecard_lama else 0.0

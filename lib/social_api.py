@@ -56,14 +56,32 @@ def graph_version() -> str:
 
 
 def _fernet():
-    key = secret("DOC_ENCRYPTION_KEY")
-    if not key:
-        return None
+    """Kunci enkripsi token. Prioritas: DOC_ENCRYPTION_KEY di Secrets; bila tidak ada/tidak valid, kunci diturunkan
+    dari DATABASE_URL (rahasia yang hanya ada di Secrets, tidak tersimpan di database) sehingga token tetap terenkripsi."""
     from cryptography.fernet import Fernet
-    try:
-        return Fernet(key.encode() if isinstance(key, str) else key)
-    except (ValueError, TypeError):
-        return None  # kunci tidak valid → halaman Koneksi menampilkan instruksi kunci baru
+    key = secret("DOC_ENCRYPTION_KEY")
+    if key:
+        try:
+            return Fernet(key.encode() if isinstance(key, str) else key)
+        except (ValueError, TypeError):
+            pass
+    url = db.database_url()
+    if not url:
+        return None
+    import base64
+    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(("kolhub-token:" + url).encode()).digest()))
+
+
+def key_source() -> str:
+    key = secret("DOC_ENCRYPTION_KEY")
+    if key:
+        from cryptography.fernet import Fernet
+        try:
+            Fernet(key.encode() if isinstance(key, str) else key)
+            return "secret"
+        except (ValueError, TypeError):
+            return "invalid"
+    return "derived"
 
 
 def can_store_tokens() -> bool:

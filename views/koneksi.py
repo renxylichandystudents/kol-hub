@@ -13,18 +13,29 @@ require(user["role"], "api.manage")
 ui.header("Koneksi Instagram & TikTok", "API resmi Meta & TikTok — follower KOL, metrik link tayang, dan data akun resmi Mitra10")
 ui.flash()
 
+# ---------------------------------------------------------------- ringkasan status
+cfg = S.meta_cfg() if S.can_store_tokens() else None
+tt_main = S.load_token("tiktok:mitra10") if S.can_store_tokens() and S.tiktok_ready() else None
+n_tt_kol = len(S.token_info("tiktok:kol:") or []) if S.can_store_tokens() else 0
+ui.kpis([
+    {"label": "Instagram Mitra10", "value": "Terhubung" if cfg else "Belum terhubung",
+     "sub": f"@{cfg['username']}" if cfg else "tempel access token Meta di tab Instagram", "sub_tone": "pos" if cfg else "neg"},
+    {"label": "TikTok Mitra10", "value": "Terhubung" if tt_main else ("Siap login" if S.tiktok_ready() else "Belum disiapkan"),
+     "sub": (tt_main.get("_info", {}).get("akun") or "—") if tt_main else
+            ("klik login di tab TikTok" if S.tiktok_ready() else "perlu app TikTok Developer"), "sub_tone": "pos" if tt_main else "neg"},
+    {"label": "KOL TikTok memberi izin", "value": S_fmt(n_tt_kol), "sub": "akun KOL yang sudah login lewat link undangan"},
+])
+if S.key_source() == "invalid":
+    st.warning("DOC_ENCRYPTION_KEY di Secrets tidak valid — sementara token dienkripsi dengan kunci turunan dari koneksi database. "
+               "Hapus atau perbaiki baris DOC_ENCRYPTION_KEY di Streamlit → Settings → Secrets.")
 if not S.can_store_tokens():
-    from cryptography.fernet import Fernet
-    st.warning("Tambahkan **DOC_ENCRYPTION_KEY** yang valid di Streamlit → Settings → Secrets agar token bisa disimpan terenkripsi. "
-               "Kunci baru (salin sekali, simpan juga di tempat aman):")
-    st.code(f'DOC_ENCRYPTION_KEY = "{Fernet.generate_key().decode()}"', language="toml")
+    st.error("Koneksi database belum tersedia, token belum bisa disimpan.")
     st.stop()
 
 t_ig, t_tt, t_log = st.tabs(["Instagram (Meta)", "TikTok", "Riwayat sinkron"])
 
 # ---------------------------------------------------------------- Instagram
 with t_ig:
-    cfg = S.meta_cfg()
     if cfg:
         info = (S.load_token("meta") or {}).get("_info", {})
         st.success(f"Terhubung ke **@{cfg['username']}** (IG user {cfg['ig_user_id']}) · token berlaku: {info.get('expires_at', '—')}")
@@ -104,14 +115,18 @@ with t_ig:
 # ---------------------------------------------------------------- TikTok
 with t_tt:
     if not S.tiktok_ready():
-        st.info("Isi Secrets: **TIKTOK_CLIENT_KEY**, **TIKTOK_CLIENT_SECRET** (dari app di developers.tiktok.com dengan Login Kit + "
-                "Display API, scope user.info.basic, user.info.profile, user.info.stats, video.list) dan **APP_URL** "
-                "(URL app ini, juga didaftarkan sebagai Redirect URI di TikTok).")
+        st.info("TikTok belum disiapkan. Langkah sekali saja:")
+        st.markdown(
+            "1. Buka **developers.tiktok.com** → buat App → tambahkan produk **Login Kit** dan **Display API**.\n"
+            "2. Aktifkan scope `user.info.basic`, `user.info.profile`, `user.info.stats`, `video.list`.\n"
+            f"3. Daftarkan Redirect URI: `{S.secret('APP_URL') or 'https://kol-app-b5spr735acpivshmftdig3.streamlit.app/'}`\n"
+            "4. Ajukan review app ke TikTok (±beberapa hari).\n"
+            "5. Setelah disetujui, isi di Streamlit → Settings → Secrets: `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `APP_URL`.")
     else:
-        main = S.load_token("tiktok:mitra10")
+        main = tt_main
         if main:
             i = main.get("_info", {})
-            st.success(f"TikTok Mitra10 terhubung: **{i.get('akun', '—')}** · {i.get('follower') or '—'} follower")
+            st.success(f"TikTok Mitra10 terhubung: **{i.get('akun', '—')}** · {S_fmt(i.get('follower'))} follower")
             if st.button("Sinkron video TikTok Mitra10", icon=":material/sync:"):
                 try:
                     r = S.sync_official_tiktok()

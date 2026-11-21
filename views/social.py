@@ -77,7 +77,7 @@ for tab, plat in zip(tabs, ["Instagram", "TikTok", None]):
             st.markdown("#### Aspek negatif")
             neg = clean[clean["sentimen"] == "negatif"].explode("aspek")
             if not neg.empty and neg["aspek"].notna().any():
-                st.bar_chart(neg["aspek"].value_counts(), horizontal=True, height=220)
+                ui.chart(neg["aspek"].value_counts().rename_axis("Aspek").rename("Komentar"), "bar", 220, horizontal=True, y_title="Komentar")
             st.markdown("#### Konten paling ramai")
             q = "SELECT platform, judul, views, komentar FROM official_posts WHERE tanggal::date BETWEEN %s AND %s"
             params = [f["start"], f["end"]]

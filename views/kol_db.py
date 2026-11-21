@@ -88,7 +88,8 @@ with tab_list:
             "Ratecard": st.column_config.NumberColumn(format="Rp %d"), "Saran harga": st.column_config.NumberColumn(format="Rp %d")})
         ui.note("Saran harga = biaya per 1.000 views wajar (median data kerja sama Mitra10 per kategori & tier) × ekspektasi views. "
                 "Ekspektasi views dari posting terukur → avg views data KOL → perkiraan dari follower (diseimbangkan dengan harga yang "
-                "pernah disepakati). Akun tanpa data views & follower memakai median harga sepakat 3 kerja sama terakhir.")
+                "pernah disepakati). Akun tanpa data views & follower memakai median harga sepakat 3 kerja sama terakhir. "
+                "Saran harga & batas nego tidak pernah melebihi ratecard — bila ratecard lebih murah, ratecard yang dipakai.")
         st.download_button("Unduh Excel", docs.to_excel(show, "kol"), file_name="database_kol.xlsx")
 
         st.markdown("#### Aksi")
@@ -168,10 +169,10 @@ with tab_add:
             kota = c6.text_input("Kota domisili")
             bio = st.text_area("Bio / deskripsi (dipakai untuk saran kategori)")
             c7, c8, c9, c10 = st.columns(4)
-            follower = c7.number_input("Follower", min_value=0, step=1000)
-            avg_views = c8.number_input("Rata-rata views", min_value=0, step=1000)
+            follower = ui.num_input("Follower", 0, key="add_fol", container=c7, in_form=True)
+            avg_views = ui.num_input("Rata-rata views", 0, key="add_views", container=c8, in_form=True)
             er = c9.number_input("ER (%)", min_value=0.0, max_value=100.0, step=0.1)
-            harga = c10.number_input("Ratecard (Rp)", min_value=0, step=100_000)
+            harga = ui.num_input("Ratecard (Rp)", 0, key="add_rc", container=c10, in_form=True)
             c11, c12, c13 = st.columns(3)
             deliv = c11.selectbox("Deliverable", DELIVERABLES)
             badan = c12.checkbox("Badan hukum (PPh 23)", value=tipe == "portal")

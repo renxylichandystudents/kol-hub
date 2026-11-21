@@ -16,6 +16,7 @@ import streamlit as st
 
 from . import analytics as A
 from . import db
+from . import formulas as F
 from .auth import log_activity
 from .rbac import Forbidden, require
 from .ui import notify
@@ -102,6 +103,14 @@ def item_prediction(kol_id: int, store_id: int) -> dict:
             "kunjungan_high": round(extra * 1.3), "audiens_lokal": float(r["audiens_lokal"]), "data_terbatas": bool(r["data_terbatas"])}
 
 
+def _cap_pred(p: dict, ratecard: float | None) -> dict:
+    """Saran harga & batas nego tidak boleh di atas ratecard baris ini."""
+    if p and ratecard and ratecard > 0:
+        w, b = F.cap_ratecard(p.get("harga_wajar"), p.get("batas_nego"), ratecard)
+        p["harga_wajar"], p["batas_nego"] = w, b
+    return p
+
+
 def item_predictions(items) -> list[dict]:
     """Prediksi per baris pengajuan. Pakai `prediksi_json` yang tersimpan saat KOL dimasukkan;
     bila kosong (mis. data contoh/impor lama), hitung ulang dari skor & lift terkini."""
@@ -113,7 +122,8 @@ def item_predictions(items) -> list[dict]:
                 p = {**item_prediction(int(r.kol_id), int(r.store_id)), **{k: v for k, v in p.items() if v is not None}}
             except Exception:  # prediksi bersifat pendukung — jangan sampai layar gagal
                 p = p or {}
-        out.append(p)
+        rc = getattr(r, "ratecard", None)
+        out.append(_cap_pred(dict(p), float(rc) if rc is not None and rc == rc else None))
     return out
 
 
@@ -133,6 +143,9 @@ def add_item(user: dict, submission_id: int, kol_id: int, store_id: int, deliver
         raise WorkflowError(f"{kol['nama']} ada di daftar blokir dan tidak dapat diajukan.")
     pred = item_prediction(kol_id, store_id)
     rc = float(kol["rc"] or kol["rc_any"] or 0)
+    pred = _cap_pred(pred, rc)
+    if harga is not None and rc > 0:
+        harga = min(float(harga), rc)  # harga awal tidak pernah di atas ratecard
     with db.transaction() as cur:
         _editable(cur, submission_id)
         dup = cur.execute("SELECT 1 FROM submission_items WHERE submission_id=%s AND kol_id=%s AND store_id=%s AND aktif",
@@ -156,8 +169,12 @@ def update_item(user: dict, item_id: int, **fields):
     if not sets:
         return
     with db.transaction() as cur:
-        it = cur.execute("SELECT submission_id FROM submission_items WHERE id=%s", (item_id,)).fetchone()
+        it = cur.execute("SELECT submission_id, ratecard FROM submission_items WHERE id=%s", (item_id,)).fetchone()
         _editable(cur, it["submission_id"])
+        rc = float(it["ratecard"] or 0)
+        if sets.get("harga_nego") is not None and rc > 0 and float(sets["harga_nego"]) > rc:
+            raise WorkflowError(f"Harga nego {F.rupiah(float(sets['harga_nego']))} di atas ratecard {F.rupiah(rc)} — "
+                                "nego harus sama atau di bawah ratecard.")
         cur.execute("UPDATE submission_items SET " + ", ".join(f"{k}=%s" for k in sets) + " WHERE id=%s", (*sets.values(), item_id))
     _clear()
 
@@ -523,7 +540,7 @@ def system_check_new_account(data: dict, ratecard: float | None) -> dict:
     tr = A.tier(follower)
     est_views = follower * (rates.get(tr) or rates.get(None) or A.DEFAULT_VIEW_RATE)
     cpm_t = tgt.get((kat, tr)) or tgt.get((kat, None)) or tgt.get(("_kol", None)) or A.DEFAULT_CPM.get(kat, 18_000)
-    wajar = round(cpm_t * est_views / 1000, -4)
+    wajar, _ = F.cap_ratecard(cpm_t * est_views / 1000, None, float(ratecard) if ratecard else None)
     out = {
         "metrik_publik": {"follower": follower, "estimasi_views": est_views},
         "kategori_saran": kat, "keyakinan_kategori": conf,

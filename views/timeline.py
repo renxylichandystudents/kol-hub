@@ -50,7 +50,7 @@ chart = alt.Chart(v).mark_bar(cornerRadius=3, height=14).encode(
     tooltip=["username", "toko", "label", "mulai", "selesai", "status", "revisi"])
 text = alt.Chart(v).mark_text(align="left", dx=3, fontSize=9, color="#0f172a").encode(x="mulai:T", y=alt.Y("baris:N", sort=None), text="label")
 rule = alt.Chart(pd.DataFrame({"hari_ini": [pd.Timestamp(today)]})).mark_rule(color="#f97316", strokeWidth=2).encode(x="hari_ini:T")
-st.altair_chart((chart + text + rule).properties(height=max(220, 26 * v["baris"].nunique())), use_container_width=True)
+st.altair_chart(ui.id_chart((chart + text + rule).properties(height=max(220, 26 * v["baris"].nunique()))), use_container_width=True)
 
 c1, c2 = st.columns(2, gap="medium")
 with c1:

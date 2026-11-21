@@ -52,7 +52,7 @@ if not ma.empty:
     st.write("")
     chart = nat.assign(Bulan=nat["bulan"].dt.strftime("%m·%b")).set_index("Bulan")[["aktual", "budget", "ly"]].rename(
         columns={"aktual": "Aktual", "budget": "Budget", "ly": "Tahun lalu"})
-    vc.line_chart(chart, height=230)
+    ui.chart(chart, "line", 230, container=vc)
     t_z, t_s = st.tabs(["Per zona", "Per toko"])
 
     def _ach(df, keys):
@@ -146,7 +146,7 @@ st.markdown("#### Traffic mingguan per zona")
 w = A.weekly(sids)
 w = w.merge(stores[["id", "zona"]], left_on="store_id", right_on="id")
 w = w[w["minggu"] >= w["minggu"].max() - pd.Timedelta(weeks=12)]
-st.line_chart(w.groupby(["minggu", "zona"])["kunjungan"].sum().unstack(), height=260)
+ui.chart(w.groupby(["minggu", "zona"])["kunjungan"].sum().unstack(), "line", 260, y_title="Kunjungan")
 
 st.markdown("#### Per toko")
 show = pd.DataFrame({

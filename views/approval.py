@@ -71,7 +71,9 @@ ui.kpis([
 flags = []
 for r in items.itertuples():
     f = []
-    if r.batas and r.harga_nego > r.batas:
+    if r.ratecard and r.ratecard == r.ratecard and r.harga_nego > r.ratecard:
+        f.append("harga nego DI ATAS ratecard")
+    elif r.batas and r.harga_nego > r.batas:
         f.append(f"harga {F.persen((r.harga_nego / r.batas - 1) * 100, 0, True)} di atas batas nego")
     if r.skor_saat_itu is not None and r.skor_saat_itu < 65:
         f.append("skor < 65")

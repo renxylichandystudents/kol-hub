@@ -41,7 +41,7 @@ if q:
 terukur = d[d["posting_terukur"] > 0]
 ui.kpis([
     {"label": "Akun", "value": F.angka(len(d), False), "sub": f"{int((d['tipe'] == 'kol').sum())} KOL · {int((d['tipe'] == 'portal').sum())} portal"},
-    {"label": "Total biaya", "value": F.rupiah(d["biaya"].sum()), "sub": f"{int(d['kerja_sama'].sum())} kerja sama"},
+    {"label": "Total biaya", "value": F.rupiah(d["biaya"].sum()), "sub": f"{F.angka(d['kerja_sama'].sum(), False)} kerja sama"},
     {"label": "Posting terukur", "value": f"{int(d['posting_terukur'].sum())}/{int(d['kerja_sama'].sum())}",
      "sub": "punya views/like dari API atau insight"},
     {"label": "CPM median", "value": F.rupiah(terukur["cpm"].median()) if terukur["cpm"].notna().any() else "—",
@@ -94,7 +94,7 @@ with tab_det:
         ft = ft[ft["kol_id"] == pick].dropna(subset=["follower"])
         if len(ft) >= 2:
             st.markdown("**Tren follower**")
-            st.line_chart(ft.set_index("tanggal")["follower"], height=200)
+            ui.chart(ft.set_index("tanggal")["follower"], "line", 200, y_title="Follower")
         p = R.post_level(start, end)
         p = p[p["kol_id"] == pick].sort_values("tanggal", ascending=False)
         st.markdown("**Riwayat posting**")

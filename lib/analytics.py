@@ -503,7 +503,7 @@ def kol_table(store_id: int | None = None, zone_id: int | None = None) -> pd.Dat
             wajar, atas = harga_hist, max(hist[-3:]) * 1.1 if hist else harga_hist * 1.15
         else:
             wajar = atas = None
-        price = F.PriceSuggestion(round(wajar, -4) if wajar else None, round(atas, -4) if atas else None)
+        price = F.PriceSuggestion(*F.cap_ratecard(wajar, atas, harga))
         aud = r["audiens"] or {}
         if target_city:
             lokal = aud.get(target_city, 0) + 0.5 * sum(v for c, v in aud.items() if c in target_zone_cities and c != target_city)

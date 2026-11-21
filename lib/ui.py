@@ -22,6 +22,7 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNavSeparator"]{border-co
 section[data-testid="stSidebar"] a[data-testid="stSidebarNavLink"][aria-current="page"]{background:#1f2b4d;border-left:3px solid var(--kh-orange);}
 section[data-testid="stSidebar"] header, section[data-testid="stSidebar"] [data-testid="stNavSectionHeader"]{color:#8ea0c6 !important;}
 section[data-testid="stSidebar"] .stButton button{background:#1f2b4d;border:1px solid #33416a;color:#fff;}
+section[data-testid="stSidebar"] [data-testid="stPopover"] button{background:#1f2b4d !important;border:1px solid #33416a !important;color:#fff !important;}
 section[data-testid="stSidebar"] [data-baseweb="select"] > div{background:#1f2b4d;border-color:#33416a;}
 .block-container{padding-top:1.6rem;max-width:1400px;}
 .kh-brand{display:flex;gap:.6rem;align-items:center;margin:.2rem 0 1rem 0}
@@ -133,9 +134,17 @@ def styled(data: pd.DataFrame, column_config: dict | None):
             continue  # format khusus (mis. %.2f) dipertahankan
         numeric.append(col)
         fmts[col] = (lambda f: (lambda v: _id_num(v, f)))(fmt)
-    if not numeric:
-        return data, cfg
     df = data.copy()
+    # kolom teks yang isinya bilangan bulat polos (mis. nomor baris '12811') → beri titik ribuan
+    for col in data.columns:
+        if col in numeric or _skip(col) or not (data[col].dtype == object or pd.api.types.is_string_dtype(data[col].dtype)) or "kontak" in str(col).lower() or "telp" in str(col).lower():
+            continue
+        sv = data[col].dropna()
+        if len(sv) and sv.map(lambda x: isinstance(x, str) and bool(re.fullmatch(r"-?(0|[1-9]\d{0,11})", x.strip()))).all() \
+                and sv.map(lambda x: len(x.strip().lstrip("-")) >= 4).any():
+            df[col] = data[col].map(lambda x: sep(x) if isinstance(x, str) else x)
+    if not numeric:
+        return (df if not df.equals(data) else data), cfg
     for col in numeric:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     sty = df.style.format(fmts, na_rep="—")
@@ -176,6 +185,10 @@ def _wrap(fn, editor: bool = False):
             if editor or not isinstance(data, pd.DataFrame):
                 cfg, rnd = number_config(data, kwargs.get("column_config"))
                 kwargs["column_config"] = cfg
+                dis = kwargs.get("disabled")
+                if editor and isinstance(data, pd.DataFrame) and dis:
+                    # kolom baca-saja dibulatkan agar tidak tampil desimal; kolom yang bisa diedit dibiarkan apa adanya
+                    data = _round_cols(data, rnd if dis is True else [c for c in rnd if c in dis])
             else:
                 data, cfg = styled(data, kwargs.get("column_config"))
                 kwargs["column_config"] = cfg or None
@@ -229,6 +242,19 @@ def header(title: str, subtitle: str | None = None):
 _NEG = re.compile(r"(?<![\w.,])(-\s?(?:Rp\s?)?\d[\d.,]*\s?%?)")
 
 
+_RAW_INT = re.compile(r"(?<![\w.,/:#])([1-9]\d{3,11})(?![\w.,/:])")
+
+
+def sep(text) -> str:
+    """Beri titik ribuan pada bilangan bulat polos dalam teks (12811 → 12.811); tahun (1990–2035) dibiarkan."""
+    def f(m):
+        n = m.group(1)
+        if len(n) == 4 and 1990 <= int(n) <= 2035:
+            return n
+        return f"{int(n):,}".replace(",", ".")
+    return _RAW_INT.sub(f, str(text or ""))
+
+
 def red_neg(text: str) -> str:
     """Escape teks lalu warnai merah setiap angka minus (mis. -4%, -1.234)."""
     return _NEG.sub(r"<span style='color:#dc2626;font-weight:600'>\1</span>", esc(text))
@@ -237,13 +263,13 @@ def red_neg(text: str) -> str:
 def kpis(items: list[dict]):
     cols = st.columns(len(items))
     for c, it in zip(cols, items):
-        val = str(it["value"])
+        val = sep(it["value"])
         tone = it.get("tone", "") or ("neg" if val.strip().startswith(("-", "−")) else "")
         size = "" if len(val) <= 11 else " style='font-size:1.25rem'" if len(val) <= 17 else " style='font-size:1.05rem'"
         c.markdown(
             f"<div class='kh-card {'hl' if it.get('highlight') else ''}'><div class='kh-kpi-l'>{esc(it['label'])}</div>"
             f"<div class='kh-kpi-v {tone}'{size}>{esc(val)}</div>"
-            f"<div class='kh-kpi-s {it.get('sub_tone', '')}'>{red_neg(it.get('sub', ''))}</div></div>",
+            f"<div class='kh-kpi-s {it.get('sub_tone', '')}'>{red_neg(sep(it.get('sub', '')))}</div></div>",
             unsafe_allow_html=True)
 
 
@@ -384,3 +410,74 @@ def flash():
 
 def data_limited(text: str = "data terbatas") -> str:
     return badge(text, "amber")
+
+
+def _parse_int(s) -> int | None:
+    digits = re.sub(r"[^\d]", "", str(s or "").split(",")[0])
+    return int(digits) if digits else None
+
+
+def num_input(label: str, value: int = 0, key: str | None = None, container=None, help: str | None = None,
+              in_form: bool = False, disabled: bool = False) -> int:
+    """Input angka bulat dengan pemisah ribuan (titik), mis. 50.000.000 — pengganti st.number_input untuk nominal besar.
+    Pengguna boleh mengetik dengan/tanpa titik; nilai dirapikan otomatis setelah Enter (di luar form)."""
+    c = container or st
+    k = key or f"num_{label}"
+    fmt = lambda v: f"{int(v):,}".replace(",", ".")  # noqa: E731
+    if k not in st.session_state:
+        st.session_state[k] = fmt(value or 0)
+
+    def _tidy():
+        v = _parse_int(st.session_state.get(k))
+        st.session_state[k] = fmt(v or 0)
+
+    kw = {} if in_form else {"on_change": _tidy}
+    raw = c.text_input(label, key=k, help=help, disabled=disabled, placeholder="mis. 1.000.000", **kw)
+    return _parse_int(raw) or 0
+
+
+# ------------------------------------------------------------------ grafik: angka format Indonesia (titik ribuan)
+ID_LOCALE = {
+    "number": {"decimal": ",", "thousands": ".", "grouping": [3], "currency": ["Rp ", ""]},
+    "time": {"dateTime": "%A, %e %B %Y %X", "date": "%d/%m/%Y", "time": "%H.%M.%S", "periods": ["AM", "PM"],
+             "days": ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"],
+             "shortDays": ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"],
+             "months": ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September",
+                        "Oktober", "November", "Desember"],
+             "shortMonths": ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]},
+}
+NUM_AXIS = ",.0f"
+
+
+def id_chart(ch):
+    """Pasang locale Indonesia (1.234.567) ke grafik Altair."""
+    return ch.configure(locale=ID_LOCALE)
+
+
+def chart(data, kind: str = "line", height: int = 250, horizontal: bool = False, container=None,
+          y_title: str | None = None, suffix: str = ""):
+    """Pengganti st.line_chart/bar_chart/area_chart dengan angka bulat bertitik ribuan di sumbu & tooltip."""
+    import altair as alt
+    c = container or st
+    df = data.to_frame(data.name or "nilai") if isinstance(data, pd.Series) else data.copy()
+    xname = df.index.name or "x"
+    df = df.reset_index().rename(columns={df.index.name or "index": xname})
+    long = df.melt(id_vars=[xname], var_name="Seri", value_name="Nilai").dropna(subset=["Nilai"])
+    long["Nilai"] = pd.to_numeric(long["Nilai"], errors="coerce").round(0)
+    xt = "T" if pd.api.types.is_datetime64_any_dtype(long[xname]) or (len(long) and hasattr(long[xname].iloc[0], "year")) else "N"
+    fmt = NUM_AXIS
+    vaxis = alt.Axis(format=fmt, labelExpr=f"datum.label + '{suffix}'" if suffix else alt.Undefined)
+    tip = [alt.Tooltip(f"{xname}:{xt}", title=xname)] + ([alt.Tooltip("Seri:N")] if long["Seri"].nunique() > 1 else []) + \
+          [alt.Tooltip("Nilai:Q", format=fmt, title=y_title or "Nilai")]
+    multi = long["Seri"].nunique() > 1
+    color = alt.Color("Seri:N", title=None, legend=alt.Legend(orient="bottom")) if multi else alt.value("#1d4ed8")
+    if kind == "bar" and horizontal:
+        enc = dict(y=alt.Y(f"{xname}:N", title=None, sort="-x"), x=alt.X("Nilai:Q", title=y_title, axis=vaxis))
+    else:
+        enc = dict(x=alt.X(f"{xname}:{xt}", title=None, sort=None),
+                   y=alt.Y("Nilai:Q", title=y_title, axis=vaxis, scale=alt.Scale(zero=kind != "line")))
+    base = alt.Chart(long)
+    mark = {"line": base.mark_line(point=True), "bar": base.mark_bar(cornerRadius=2),
+            "area": base.mark_area(opacity=.35, line=True)}[kind]
+    ch = mark.encode(color=color, tooltip=tip, **enc).properties(height=height)
+    c.altair_chart(id_chart(ch), use_container_width=True)

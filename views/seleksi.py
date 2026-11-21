@@ -124,7 +124,7 @@ with tab_pick:
 with tab_gen:
     st.caption("Generate pengajuan sesuai budget, jumlah KOL & toko — Integer Linear Programming (OR-Tools CP-SAT) dengan kurva jenuh per toko.")
     g1, g2, g3, g4 = st.columns(4)
-    budget = g1.number_input("Budget (Rp)", min_value=0, step=1_000_000, value=int(max(c["budget"] - used, 0)))
+    budget = ui.num_input("Budget (Rp)", int(max(c["budget"] - used, 0)), key=f"gen_budget_{pick}_{int(used)}", container=g1)
     n_kol = g2.number_input("Jumlah KOL", min_value=1, max_value=40, value=max(1, int((c["slot"] or 5) - len(items))))
     zmin, zmax = g3.slider("Porsi biaya per zona", 0, 100, (0 if len(set(stores[stores['id'].isin(sel_ids)]['zona'])) < 2 else 10, 70), step=5)
     wajib = g4.multiselect("Toko wajib ≥ 1 KOL", sf, default=sf[: min(len(sf), int(n_kol))])

@@ -89,7 +89,7 @@ with right:
     st.markdown("#### Mapping audiens")
     aud = pd.Series(r["audiens"]).sort_values(ascending=False)
     if not aud.empty:
-        st.bar_chart(aud * 100, horizontal=True, height=200)
+        ui.chart((aud * 100).rename_axis("Kota").rename("Audiens"), "bar", 200, horizontal=True, y_title="Audiens %", suffix="%")
     cities = {c: v for c, v in r["audiens"].items() if c != "Lainnya"}
     near = stores[stores["kota"].isin(cities)].assign(audiens=lambda x: x["kota"].map(cities)).sort_values("audiens", ascending=False)
     if not near.empty:

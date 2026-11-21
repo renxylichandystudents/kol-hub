@@ -79,7 +79,7 @@ if can(user["role"], "proof.input"):
         else:
             st.warning("OCR tidak dapat membaca angka dari gambar ini — isi manual.")
     m = st.columns(5)
-    vals = {k: m[j].number_input(k.title(), min_value=0, value=int(ocr.get(k, 0)), step=1, key=f"m_{k}_{r['item_id']}")
+    vals = {k: ui.num_input(k.title(), int(ocr.get(k, 0)), key=f"m_{k}_{r['item_id']}_{insight.name if insight else ''}", container=m[j])
             for j, k in enumerate(["views", "likes", "komentar", "share", "save"])}
     if st.button("Simpan bukti tayang", type="primary"):
         if not link:
