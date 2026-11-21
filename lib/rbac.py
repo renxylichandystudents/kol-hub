@@ -52,6 +52,7 @@ PERMISSIONS: dict[str, set[str]] = {
     "admin.users": {"super_user"},
     "data.reset_sample": {"super_user"},
     "data.import": {"ecommerce", "super_user"},
+    "api.manage": {"ecommerce", "super_user"},
 }
 
 

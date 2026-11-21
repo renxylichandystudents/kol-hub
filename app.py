@@ -36,7 +36,9 @@ PAGES = [
     ("kol_analisa.py", "Analisa & Scoring KOL", ":material/insights:", "kol.view", "KOL & Toko"),
     ("bandingkan.py", "Bandingkan KOL", ":material/compare_arrows:", "kol.view", "KOL & Toko"),
     ("mapping.py", "Mapping Toko, Zona & KOL", ":material/map:", "kol.view", "KOL & Toko"),
+    ("laporan_kol.py", "Laporan Performa KOL & Portal", ":material/leaderboard:", "kol.view", "KOL & Toko"),
     ("impor.py", "Impor Excel KOL & Portal", ":material/upload_file:", "data.import", "KOL & Toko"),
+    ("koneksi.py", "Koneksi Instagram & TikTok", ":material/link:", "api.manage", "KOL & Toko"),
     ("campaign.py", "Campaign & Pengajuan", ":material/list_alt:", "campaign.view", "Campaign"),
     ("seleksi.py", "Seleksi & Review KOL", ":material/checklist:", "campaign.edit", "Campaign"),
     ("draft.py", "Draft Pengajuan", ":material/edit_note:", "campaign.edit", "Campaign"),
@@ -54,6 +56,21 @@ PAGES = [
     ("akses.py", "Akses & Role", ":material/admin_panel_settings:", "admin.users", "Sistem"),
     ("akun.py", "Akun Saya", ":material/person:", "dashboard.view", "Sistem"),
 ]
+
+# Callback OAuth TikTok (KOL atau akun Mitra10 memberi izin) — bisa datang tanpa sesi login
+qp = st.query_params
+if qp.get("code") and qp.get("state"):
+    from lib import social_api as S
+    try:
+        st.success(S.handle_tiktok_callback(qp["code"], qp["state"]))
+    except Exception as e:  # noqa: BLE001
+        st.error(f"Gagal menghubungkan akun TikTok: {e}")
+    st.query_params.clear()
+    st.stop()
+if qp.get("error") and qp.get("state"):
+    st.warning(f"Izin TikTok tidak diberikan ({qp.get('error_description') or qp.get('error')}).")
+    st.query_params.clear()
+    st.stop()
 
 user = auth.current_user()
 
@@ -110,5 +127,16 @@ try:
     jobs.ensure_fresh()
 except Exception as e:
     st.warning(f"Job analitik terjadwal gagal dijalankan: {e}. Layar memakai hasil terakhir yang tersedia.")
+
+if not st.session_state.get("_social_checked"):
+    st.session_state["_social_checked"] = True
+    try:
+        from lib import social_api as S
+        if db.scalar("SELECT COUNT(*) FROM api_tokens"):
+            with st.spinner("Sinkron harian Instagram & TikTok…"):
+                if any(S.run_daily().values()):
+                    st.cache_data.clear()
+    except Exception as e:  # noqa: BLE001
+        st.warning(f"Sinkron Instagram/TikTok gagal: {e}")
 
 nav.run()
