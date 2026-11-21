@@ -70,13 +70,16 @@ with tab_list:
             "Nama": d["nama"], "Akun": d["username"], "Platform": d["platform"], "Kategori": d["kategori"].map(KATEGORI_LABEL),
             "Kota": d["kota"], "Follower": d["follower"], "Avg views": d["avg_views"], "ER adj": d["er_adj"],
             "Skor": d["skor"].round(0), "Label": d["label"], "Ratecard": d["harga"], "Saran harga": d["harga_wajar"],
-            "Kerja sama": d["kerja_sama"], "Campaign terakhir": d["campaign_terakhir"].fillna("—"), "Segmen": d["segmen"],
+            "Dasar saran": d["dasar_harga"], "Kerja sama": d["kerja_sama"], "Campaign terakhir": d["campaign_terakhir"].fillna("—"), "Segmen": d["segmen"],
             "Status": d["status"]})
         st.dataframe(show, hide_index=True, use_container_width=True, height=460, column_config={
             "Follower": st.column_config.NumberColumn(format="%d"), "Avg views": st.column_config.NumberColumn(format="%d"),
             "ER adj": st.column_config.NumberColumn(format="%.1f%%"),
             "Skor": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%d"),
             "Ratecard": st.column_config.NumberColumn(format="Rp %d"), "Saran harga": st.column_config.NumberColumn(format="Rp %d")})
+        ui.note("Saran harga = biaya per 1.000 views wajar (median data kerja sama Mitra10 per kategori & tier) × ekspektasi views. "
+                "Ekspektasi views dari posting terukur → avg views data KOL → perkiraan dari follower (diseimbangkan dengan harga yang "
+                "pernah disepakati). Akun tanpa data views & follower memakai median harga sepakat 3 kerja sama terakhir.")
         st.download_button("Unduh Excel", docs.to_excel(show, "kol"), file_name="database_kol.xlsx")
 
         st.markdown("#### Aksi")

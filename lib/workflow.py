@@ -517,10 +517,13 @@ def system_check_new_account(data: dict, ratecard: float | None) -> dict:
                     OR rtrim(lower(link),'/')=rtrim(lower(%s),'/')""", (plat, un, data.get("link", "")))
     kat, conf = suggest_category(data.get("bio", "") + " " + data.get("nama", ""))
     follower = float(data.get("follower") or 0)
-    ratio = {"TikTok": 0.35, "Instagram": 0.22}.get(plat, 0.1)
-    est_views = follower * ratio
-    cpm_t = A.DEFAULT_CPM.get(kat, 55_000)
-    wajar = cpm_t * est_views / 1000
+    kb = A.kol_base()
+    tgt = A.cpm_targets(kb, A.post_history()) if not kb.empty else {}
+    rates = A.view_rates(kb) if not kb.empty else {}
+    tr = A.tier(follower)
+    est_views = follower * (rates.get(tr) or rates.get(None) or A.DEFAULT_VIEW_RATE)
+    cpm_t = tgt.get((kat, tr)) or tgt.get((kat, None)) or tgt.get(("_kol", None)) or A.DEFAULT_CPM.get(kat, 18_000)
+    wajar = round(cpm_t * est_views / 1000, -4)
     out = {
         "metrik_publik": {"follower": follower, "estimasi_views": est_views},
         "kategori_saran": kat, "keyakinan_kategori": conf,

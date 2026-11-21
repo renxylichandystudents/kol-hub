@@ -25,7 +25,7 @@ with right:
 
     if st.session_state.get("_su_status") == "belum_dikonfigurasi":
         st.warning("Belum ada akun Super User. Tambahkan **SUPERUSER_EMAIL** dan **SUPERUSER_INITIAL_PASSWORD** di Secrets "
-                   "Streamlit Cloud, lalu reboot app. Kata sandi awal wajib diganti dan 2FA diaktifkan saat login pertama.")
+                   "Streamlit Cloud, lalu reboot app. Kata sandi awal wajib diganti saat login pertama.")
 
     if stage == "cred" or not pending:
         st.markdown("### Masuk")
@@ -41,8 +41,7 @@ with right:
             else:
                 u = {k: v for k, v in u.items() if k not in ("password_hash", "totp_secret")}
                 st.session_state["pending_user"] = u
-                st.session_state["login_stage"] = "change_pw" if u["must_change_password"] else (
-                    "totp" if u["totp_enabled"] else "enroll")
+                st.session_state["login_stage"] = "change_pw" if u["must_change_password"] else "role"
                 st.rerun()
         if auth.sso_configured():
             sso_email = auth.sso_user_email()
@@ -72,59 +71,22 @@ with right:
                 st.error("Kata sandi harus: " + ", ".join(probs) + ".")
             else:
                 auth.set_password(pending["id"], p1)
-                st.session_state["login_stage"] = "totp" if pending["totp_enabled"] else "enroll"
-                st.rerun()
-
-    elif stage == "enroll":
-        st.markdown("### Aktifkan verifikasi 2 langkah")
-        st.caption("Pindai kode QR dengan Google Authenticator / Microsoft Authenticator, lalu masukkan 6 digit kode.")
-        if "totp_secret_new" not in st.session_state:
-            st.session_state["totp_secret_new"] = auth.new_totp_secret()
-        secret = st.session_state["totp_secret_new"]
-        uri = auth.totp_uri(secret, pending["email"])
-        png = auth.qr_png(uri)
-        if png:
-            st.image(png, width=190)
-        st.code(secret, language=None)
-        with st.form("enroll"):
-            code = st.text_input("Kode 6 digit", max_chars=6)
-            ok = st.form_submit_button("Verifikasi & aktifkan", type="primary", use_container_width=True)
-        if ok:
-            if auth.verify_totp(secret, code):
-                auth.enable_totp(pending["id"], secret)
-                st.session_state.pop("totp_secret_new", None)
                 st.session_state["login_stage"] = "role"
                 st.rerun()
-            else:
-                st.error("Kode tidak cocok. Pastikan jam di ponsel akurat lalu coba lagi.")
-
-    elif stage == "totp":
-        st.markdown("### Verifikasi 2 langkah")
-        with st.form("totp"):
-            code = st.text_input("Kode dari aplikasi authenticator", max_chars=6)
-            ok = st.form_submit_button("Verifikasi", type="primary", use_container_width=True)
-        if ok:
-            fresh = auth.find_user(pending["email"])
-            if auth.verify_totp(fresh["totp_secret"], code):
-                st.session_state["login_stage"] = "role"
-                st.rerun()
-            else:
-                auth.log_activity(pending["id"], "2fa_gagal", "user", pending["id"], "Kode 2FA salah")
-                st.error("Kode salah.")
 
     if st.session_state.get("login_stage") == "role" and pending:
         roles = list(pending["roles"])
         if len(roles) == 1:
-            auth.finish_login(pending, roles[0], "sso" if st.session_state.get("sso") else "password+2fa")
+            auth.finish_login(pending, roles[0], "sso" if st.session_state.get("sso") else "password")
             st.rerun()
         st.markdown("### Pilih role")
         st.caption("Menu menyesuaikan role yang dipilih.")
         r = st.radio("Masuk sebagai", roles, format_func=ui.role_label)
         if st.button("Lanjut", type="primary", use_container_width=True):
-            auth.finish_login(pending, r, "sso" if st.session_state.get("sso") else "password+2fa")
+            auth.finish_login(pending, r, "sso" if st.session_state.get("sso") else "password")
             st.rerun()
 
     if stage != "cred" and pending and st.button("Batal", key="cancel_login"):
-        for k in ("pending_user", "login_stage", "totp_secret_new", "sso"):
+        for k in ("pending_user", "login_stage", "sso"):
             st.session_state.pop(k, None)
         st.rerun()

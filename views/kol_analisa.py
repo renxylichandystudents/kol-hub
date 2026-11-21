@@ -51,7 +51,7 @@ ui.kpis([
      "highlight": True, "tone": "pos"},
     {"label": "ER terkoreksi", "value": F.persen(r["er_adj"]), "sub": f"ER mentah {F.persen(r['er_kol'])} · n={int(r['n_post'])}"},
     {"label": "Ekspektasi views", "value": F.angka(r["views_q50"]), "sub": f"rentang {F.angka(r['views_q20'])} – {F.angka(r['views_q80'])}"},
-    {"label": "Saran harga", "value": F.rupiah(r["harga_wajar"]), "sub": f"batas nego {F.rupiah(r['batas_nego'])} · ratecard {F.rupiah(r['harga'])}"},
+    {"label": "Saran harga", "value": F.rupiah(r["harga_wajar"]), "sub": f"batas nego {F.rupiah(r['batas_nego'])} · ratecard {F.rupiah(r['harga'])} · dasar: {r['dasar_harga']}"},
     {"label": "Biaya per kunjungan tambahan", "value": F.rupiah(r["cpiv"]) if r["cpiv"] else "—",
      "sub": f"lift historis {F.persen(r['lift_hist'] * 100, tanda=True)}" if r["lift_hist"] is not None and r["lift_hist"] == r["lift_hist"] else "belum ada data dampak"},
 ])

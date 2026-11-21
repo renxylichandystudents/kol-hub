@@ -46,6 +46,8 @@ section[data-testid="stSidebar"] [data-baseweb="select"] > div{background:#1f2b4
 .kh-step.on{background:var(--kh-blue);color:#fff;border-color:var(--kh-blue)}.kh-step.done{background:#dcfce7;color:#166534;border-color:#bbf7d0}
 .kh-sent{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:.2rem 0 .6rem}
 .kh-sent span{display:block;height:100%}
+/* sembunyikan petunjuk "Press Enter to submit form" yang menutupi isi kolom kata sandi */
+[data-testid="InputInstructions"]{display:none !important}
 @media print{section[data-testid="stSidebar"],header,.stButton,[data-testid="stToolbar"]{display:none !important}}
 </style>
 """

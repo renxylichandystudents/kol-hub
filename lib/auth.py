@@ -1,7 +1,7 @@
 """Autentikasi & activity log — Spesifikasi layar 1, 25 dan C.10.
 
 - Kata sandi Argon2id; kunci akun 15 menit setelah 5 percobaan gagal.
-- TOTP 2FA wajib; kata sandi sementara wajib diganti saat login pertama.
+- Login cukup email + kata sandi (2FA dimatikan atas permintaan pengguna); kata sandi sementara wajib diganti saat login pertama.
 - Akun Super User awal dibuat dari Secrets SUPERUSER_EMAIL + SUPERUSER_INITIAL_PASSWORD (tidak ditulis di kode).
 - Riwayat aktivitas tercatat di activity_log.
 """

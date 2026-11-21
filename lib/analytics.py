@@ -14,7 +14,10 @@ from . import formulas as F
 from .preprocess import normalize_text
 
 TTL = 300
-DEFAULT_CPM = {"comedy": 52_000, "beauty": 70_000, "lifestyle": 64_000, "culinary": 58_000, "general": 45_000, "portal": 80_000}
+# Fallback biaya per 1.000 views bila belum ada data sendiri — dikalibrasi dari realisasi KOL Mitra10 Nov 2026
+# (median budget ÷ avg views ≈ Rp 18–19 rb). Begitu ada ≥ 3 sampel, CPM_target dihitung dari data sendiri.
+DEFAULT_CPM = {"comedy": 20_000, "beauty": 22_000, "lifestyle": 19_000, "culinary": 19_000, "general": 18_000, "portal": 15_000}
+DEFAULT_VIEW_RATE = 0.6   # median avg views ÷ follower pada data KOL Mitra10
 
 
 def today() -> date:
@@ -274,7 +277,7 @@ def item_lifts() -> pd.DataFrame:
 
 # ====================================================================== KOL features & skor
 def tier(follower: float) -> str:
-    f = follower or 0
+    f = 0 if follower is None or (isinstance(follower, float) and math.isnan(follower)) else follower
     return "nano" if f < 10_000 else "mikro" if f < 100_000 else "menengah" if f < 500_000 else "makro"
 
 
@@ -330,21 +333,48 @@ def _views_quantiles(k_row, posts: pd.DataFrame) -> tuple[float, float, float, i
 
 
 def cpm_targets(kols: pd.DataFrame, posts: pd.DataFrame) -> dict:
-    """CPM_target = median CPM kerja sama yang mencapai target, per kategori & tier (fallback default)."""
-    if posts.empty:
+    """CPM_target = median biaya per 1.000 views dari data Mitra10 sendiri, per (kategori/portal, tier) → per kategori → semua.
+    Sampel: (a) posting dengan views terukur yang mencapai ≥ 80% ekspektasi, (b) harga sepakat terakhir ÷ avg views akun."""
+    samples = []
+    k = kols.assign(kunci=np.where(kols["tipe"] == "portal", "portal", kols["kategori"]))
+    if not posts.empty:
+        p = posts.merge(k[["id", "kunci", "tier", "avg_views"]], left_on="kol_id", right_on="id")
+        p = p[p["cpm"].notna() & (p["views"] >= 0.8 * p["avg_views"].fillna(0))]
+        samples += list(zip(p["kunci"], p["tier"], p["cpm"].astype(float)))
+    snap = k[(k["avg_views"] > 0) & (k["harga"] > 0)]
+    samples += list(zip(snap["kunci"], snap["tier"], (snap["harga"] / snap["avg_views"] * 1000).astype(float)))
+    if not samples:
         return {}
-    p = posts.merge(kols[["id", "kategori", "tipe", "tier", "avg_views"]], left_on="kol_id", right_on="id")
-    p = p[p["cpm"].notna()]
-    p["kunci"] = np.where(p["tipe"] == "portal", "portal", p["kategori"])
-    p = p[p["views"] >= 0.8 * p["avg_views"].fillna(0)]  # 'mencapai target' = views ≥ 80% ekspektasi
+    df = pd.DataFrame(samples, columns=["kunci", "tier", "cpm"])
     out = {}
-    for (kunci, t), g in p.groupby(["kunci", "tier"]):
-        if len(g) >= 2:
+    for (kunci, t), g in df.groupby(["kunci", "tier"]):
+        if len(g) >= 3:
             out[(kunci, t)] = float(g["cpm"].median())
-    for kunci, g in p.groupby("kunci"):
-        if len(g) >= 2:
+    for kunci, g in df.groupby("kunci"):
+        if len(g) >= 3:
             out[(kunci, None)] = float(g["cpm"].median())
+    kol_only = df[df["kunci"] != "portal"]
+    if len(kol_only) >= 3:
+        out[("_kol", None)] = float(kol_only["cpm"].median())
     return out
+
+
+def view_rates(kols: pd.DataFrame) -> dict:
+    """Rasio avg views ÷ follower per tier (median) untuk estimasi views akun yang belum punya data views."""
+    x = kols[(kols["follower"] > 0) & (kols["avg_views"] > 0)]
+    out = {t: float((g["avg_views"] / g["follower"]).median()) for t, g in x.groupby("tier") if len(g) >= 3}
+    if len(x) >= 3:
+        out[None] = float((x["avg_views"] / x["follower"]).median())
+    return out
+
+
+@st.cache_data(ttl=TTL, show_spinner=False)
+def paid_history() -> pd.DataFrame:
+    """Harga yang benar-benar disepakati per akun (baris pengajuan disetujui, bukan cancel)."""
+    return db.df("""SELECT i.kol_id, i.harga_nego AS harga, COALESCE(i.tanggal_posting, s.created_at::date) AS tgl
+                    FROM submission_items i JOIN submissions s ON s.id=i.submission_id
+                    WHERE i.aktif AND i.keputusan_item='setuju' AND i.harga_nego > 0
+                      AND s.status NOT IN ('Draft','Ditolak','Revisi','Diajukan','Review Asisten Manager','Review Manager')""")
 
 
 @st.cache_data(ttl=TTL, show_spinner=False)
@@ -365,19 +395,48 @@ def kol_table(store_id: int | None = None, zone_id: int | None = None) -> pd.Dat
     elif zone_id:
         target_zone_cities = zone_cities.get(zone_id, set())
     targets = cpm_targets(k, posts)
+    vrate = view_rates(k)
+    paid = paid_history()
+    paid_by = paid.sort_values("tgl").groupby("kol_id")["harga"].apply(lambda x: list(x.astype(float))).to_dict() if not paid.empty else {}
 
     rows = []
     for _, r in k.iterrows():
         kp = posts[posts["kol_id"] == r["id"]] if not posts.empty else pd.DataFrame(columns=["views", "umur", "er", "cpm", "telat_hari", "bukti_kurang"])
         q20, q50, q80, n = _views_quantiles(r, kp)
+        if n:
+            dasar = f"views {n} posting"
+        elif r["avg_views"] and not pd.isna(r["avg_views"]):
+            dasar = "avg views data KOL"
+        elif r["follower"] and not pd.isna(r["follower"]):
+            rate = vrate.get(r["tier"]) or vrate.get(None) or DEFAULT_VIEW_RATE
+            q50 = float(r["follower"]) * rate
+            q20, q80 = q50 * 0.6, q50 * 1.25
+            dasar = "estimasi views dari follower"
+        else:
+            q20 = q50 = q80 = None
+            dasar = "riwayat harga"
+        hist = paid_by.get(r["id"], [])
+        harga_hist = float(np.median(hist[-3:])) if hist else None
         er_list = list(kp["er"].dropna()) if not kp.empty else []
         er_kol = float(np.mean(er_list)) if er_list else float(r["er_snapshot"] or 0)
         n_er = len(er_list) if er_list else 1
         kunci = "portal" if r["tipe"] == "portal" else r["kategori"]
-        cpm_t = targets.get((kunci, r["tier"])) or targets.get((kunci, None)) or DEFAULT_CPM.get(kunci, 55_000)
-        harga = float(r["harga"] or 0)
+        cpm_t = (targets.get((kunci, r["tier"])) or targets.get((kunci, None))
+                 or (targets.get(("_kol", None)) if kunci != "portal" else None) or DEFAULT_CPM.get(kunci, 18_000))
+        harga = float(r["harga"] or 0) if not pd.isna(r["harga"]) else 0.0
         exp_cpm = F.cpm(harga, q50) if q50 else None
-        price = F.suggest_price(cpm_t, q50 or 0, q80 or 0)
+        if q50:
+            price = F.suggest_price(cpm_t, q50, q80 or q50 * 1.25)
+            wajar, atas = price.wajar, price.batas_atas
+            if dasar == "estimasi views dari follower" and harga_hist:
+                # views hanya perkiraan → seimbangkan dengan harga yang pernah disepakati (rata-rata geometrik)
+                wajar = math.sqrt(wajar * harga_hist)
+                atas = wajar * (q80 / q50 if q50 else 1.25)
+        elif harga_hist:
+            wajar, atas = harga_hist, max(hist[-3:]) * 1.1 if hist else harga_hist * 1.15
+        else:
+            wajar = atas = None
+        price = F.PriceSuggestion(round(wajar, -4) if wajar else None, round(atas, -4) if atas else None)
         aud = r["audiens"] or {}
         if target_city:
             lokal = aud.get(target_city, 0) + 0.5 * sum(v for c, v in aud.items() if c in target_zone_cities and c != target_city)
@@ -405,7 +464,7 @@ def kol_table(store_id: int | None = None, zone_id: int | None = None) -> pd.Dat
             "konsistensi": F.consistency(list(kp["views"].dropna())) if len(kp) >= 2 else None,
             "harga": harga, "deliverable": r["deliverable"], "cpm_target": cpm_t, "cpm_harapan": exp_cpm,
             "efisiensi": (cpm_t / exp_cpm) if exp_cpm else None,
-            "harga_wajar": price.wajar, "batas_nego": price.batas_atas,
+            "harga_wajar": price.wajar, "batas_nego": price.batas_atas, "dasar_harga": dasar, "harga_historis": harga_hist,
             "audiens_lokal": lokal, "audiens": aud, "lift_hist": lift_hist, "extra_hist": extra_hist, "cpiv": cpiv,
             "telat": int((kp["telat_hari"] > 0).sum()) if not kp.empty else 0,
             "bukti_kurang": int(kp["bukti_kurang"].sum()) if not kp.empty and "bukti_kurang" in kp else 0,

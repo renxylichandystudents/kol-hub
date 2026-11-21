@@ -85,10 +85,6 @@ with t2:
             auth.log_activity(user["id"], "reset_kata_sandi", "user", uid, f"Kata sandi {pick} direset")
             st.success("Kata sandi sementara baru (tampil sekali):")
             st.code(pw, language=None)
-        if c3.button("Reset 2FA"):
-            db.execute("UPDATE users SET totp_enabled=FALSE, totp_secret=NULL WHERE id=%s", (uid,))
-            auth.log_activity(user["id"], "reset_2fa", "user", uid, f"2FA {pick} direset")
-            st.success("2FA direset — pengguna akan diminta mengaktifkan ulang saat login.")
         if c4.button("Buka kunci"):
             db.execute("UPDATE users SET failed_attempts=0, locked_until=NULL WHERE id=%s", (uid,))
             st.success("Kunci akun dibuka.")
