@@ -38,7 +38,7 @@ with st.form("req"):
             st.caption("Belum ada saran untuk toko ini.")
         else:
             kol_id = st.selectbox("KOL / Portal disarankan", rec["id"].tolist(), format_func=lambda k: (lambda r:
-                                  f"{r['username']} · {r['platform']} · skor {r['skor']:.0f} · audiens lokal {r['audiens_lokal'] * 100:.0f}% · "
+                                  f"{r['username']} · {r['area_ket']} · skor {r['skor']:.0f} · "
                                   f"prediksi +{F.angka(r['prediksi_low'])}–{F.angka(r['prediksi_high'])} kunjungan")(rec.set_index("id").loc[k]))
             rc = float(rec.set_index("id").loc[kol_id, "harga"]) if kol_id else None
     else:

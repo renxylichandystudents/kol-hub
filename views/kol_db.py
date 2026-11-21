@@ -52,7 +52,16 @@ with tab_list:
         stt = c[3].selectbox("Status", ["Semua", "aktif", "diblokir"])
         lab = c[4].selectbox("Label skor", ["Semua", "Rekomendasi", "Layak", "Evaluasi", "Tidak disarankan"])
         q = c[5].text_input("Cari nama / username / kota")
+        a1, a2, _ = st.columns([1.2, 2, 2.8])
+        zf = a1.selectbox("Area zona", ["Semua"] + list(ui.zones()["nama"]), key="kdb_zona")
+        tpool = ui.stores() if zf == "Semua" else ui.stores()[ui.stores()["zona"] == zf]
+        tf = a2.selectbox("Area toko", ["Semua"] + list(tpool["nama"]), key="kdb_toko")
         d = kt.copy()
+        if zf != "Semua":
+            d = d[d["area_zona"].str.contains(zf, regex=False)]
+        if tf != "Semua":
+            short = tf.replace("Mitra10 ", "")
+            d = d[d["area_toko"].map(lambda x: short in [t.strip() for t in str(x).split(",")])]
         if tipe != "Semua":
             d = d[d["tipe"] == ("kol" if tipe == "KOL" else "portal")]
         if kat != "Semua":
@@ -68,7 +77,7 @@ with tab_list:
             d = d[d["nama"].str.lower().str.contains(ql) | d["username"].str.lower().str.contains(ql) | d["kota"].fillna("").str.lower().str.contains(ql)]
         show = pd.DataFrame({
             "Nama": d["nama"], "Akun": d["username"], "Platform": d["platform"], "Kategori": d["kategori"].map(KATEGORI_LABEL),
-            "Kota": d["kota"], "Follower": d["follower"], "Avg views": d["avg_views"], "ER adj": d["er_adj"],
+            "Wilayah (toko)": d["area_toko"], "Follower": d["follower"], "Avg views": d["avg_views"], "ER adj": d["er_adj"],
             "Skor": d["skor"].round(0), "Label": d["label"], "Ratecard": d["harga"], "Saran harga": d["harga_wajar"],
             "Dasar saran": d["dasar_harga"], "Kerja sama": d["kerja_sama"], "Campaign terakhir": d["campaign_terakhir"].fillna("—"), "Segmen": d["segmen"],
             "Status": d["status"]})

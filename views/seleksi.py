@@ -63,11 +63,13 @@ sf = f2.multiselect("Toko", list(spool["nama"]), default=list(spool["nama"]))
 kf = f3.selectbox("Kategori", ["Semua"] + [KATEGORI_LABEL[k] for k in KATEGORI])
 pf = f4.selectbox("Platform", ["Semua", "Instagram", "TikTok", "Portal News"])
 sel_ids = [int(stores[stores["nama"] == s]["id"].iloc[0]) for s in sf]
+luas = st.toggle("Perluas ke KOL/portal satu zona (kota lain)", value=False, key="sel_luas",
+                 help="Default hanya KOL/portal yang pernah bekerja untuk toko tersebut atau toko lain di kota yang sama.")
 
 # kandidat: rekomendasi per toko (smart suggestion)
 cands = []
 for sid in sel_ids:
-    rec = A.recommend_for_store(sid, k=10, seed=sid)
+    rec = A.recommend_for_store(sid, k=10, seed=sid, perluas_zona=luas)
     if not rec.empty:
         rec = rec.assign(store_id=sid, toko=stores.set_index("id").loc[sid, "nama"], zona=stores.set_index("id").loc[sid, "zona"])
         cands.append(rec)
@@ -90,14 +92,14 @@ with tab_pick:
         view = cand.sort_values("rank", ascending=False)
         view = view if limit else view.head(15)
         tbl = pd.DataFrame({"Pilih": view["id"].isin(pre), "KOL": view["username"], "Toko": view["toko"], "Kategori": view["kategori"].map(KATEGORI_LABEL),
-                            "Skor": view["skor"].round(0), "Audiens lokal": view["audiens_lokal"] * 100,
+                            "Skor": view["skor"].round(0), "Wilayah": view["area_ket"], "Kedekatan area": view["audiens_lokal"] * 100,
                             "Prediksi kunjungan": [f"+{F.angka(a)} – {F.angka(b)}" for a, b in zip(view["prediksi_low"], view["prediksi_high"])],
                             "Ratecard": view["harga"], "Saran harga": view["harga_wajar"], "Alasan": view["alasan"].map(" · ".join),
                             "kol_id": view["id"], "store_id": view["store_id"]})
         ed = st.data_editor(tbl, hide_index=True, use_container_width=True, height=420, disabled=[x for x in tbl.columns if x != "Pilih"],
                             column_config={"kol_id": None, "store_id": None,
                                            "Skor": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%d"),
-                                           "Audiens lokal": st.column_config.NumberColumn(format="%.0f%%"),
+                                           "Kedekatan area": st.column_config.NumberColumn(format="%.0f%%"),
                                            "Ratecard": st.column_config.NumberColumn(format="Rp %d"),
                                            "Saran harga": st.column_config.NumberColumn(format="Rp %d")}, key=f"sel_{pick}")
         chosen = ed[ed["Pilih"]]

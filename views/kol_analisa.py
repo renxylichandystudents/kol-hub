@@ -17,21 +17,28 @@ base = A.kol_table()
 if base.empty:
     st.info("Database KOL kosong.")
     st.stop()
-labels = (base["username"] + " — " + base["nama"] + " (" + base["platform"] + ")").tolist()
-ids = base["id"].tolist()
-sel = st.session_state.get("sel_kol")
-idx = ids.index(sel) if sel in ids else 0
-c0, c1, c2 = st.columns([2.2, 1.4, 1.4])
-pick = c0.selectbox("KOL / Portal News", labels, index=idx)
-kol_id = ids[labels.index(pick)]
-st.session_state["sel_kol"] = kol_id
 stores, zones = ui.stores(), ui.zones()
-zsel = c1.selectbox("Filter zona", ["Semua zona"] + list(zones["nama"]), key="an_zone")
+c1, c2, c0 = st.columns([1.4, 1.6, 2.4])
+zsel = c1.selectbox("Zona", ["Semua zona"] + list(zones["nama"]), key="an_zone")
 pool = stores if zsel == "Semua zona" else stores[stores["zona"] == zsel]
-ssel = c2.selectbox("Filter toko", ["Semua toko"] + list(pool["nama"]), key="an_store")
+ssel = c2.selectbox("Toko", ["Semua toko"] + list(pool["nama"]), key="an_store")
 store_id = None if ssel == "Semua toko" else int(pool[pool["nama"] == ssel]["id"].iloc[0])
 zone_id = None if zsel == "Semua zona" else int(zones[zones["nama"] == zsel]["id"].iloc[0])
 kt = A.kol_table(store_id=store_id, zone_id=zone_id) if (store_id or zone_id) else base
+# daftar KOL mengikuti area: hanya yang pernah bekerja untuk toko / kota / zona terpilih
+lst = (kt[kt["area_level"].isin(["toko", "kota"])] if store_id else kt[kt["area_level"].notna()]) if (store_id or zone_id) else kt
+if lst.empty:
+    st.info("Belum ada KOL / portal yang pernah bekerja untuk area ini.")
+    st.stop()
+lvl_order = {"toko": 0, "kota": 1, "zona": 2}
+lst = lst.assign(_o=lst["area_level"].map(lvl_order).fillna(3)).sort_values(["_o", "skor"], ascending=[True, False])
+labels = (lst["username"] + " — " + lst["tipe"].str.upper() + (" · " + lst["area_ket"]).where(lst["area_ket"] != "", "")).tolist()
+ids = lst["id"].tolist()
+sel = st.session_state.get("sel_kol")
+pick = c0.selectbox(f"KOL / Portal ({len(ids)} di area ini)" if (store_id or zone_id) else "KOL / Portal", labels,
+                    index=ids.index(sel) if sel in ids else 0)
+kol_id = ids[labels.index(pick)]
+st.session_state["sel_kol"] = kol_id
 r = kt[kt["id"] == kol_id].iloc[0]
 if st.session_state.get("_last_an") != kol_id:
     auth.log_activity(user["id"], "lihat_analisa", "kol", kol_id, f"Analisa {r['username']}")

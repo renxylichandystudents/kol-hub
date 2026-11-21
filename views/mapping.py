@@ -87,22 +87,27 @@ with st.expander("Traffic offline historis (seluruh data)"):
         st.area_chart(w.set_index("minggu")["kunjungan"], height=220)
 
 st.markdown("#### KOL / Portal News yang disarankan")
-rec = A.recommend_for_store(store_id, k=8)
+luas = st.toggle("Perluas ke KOL/portal satu zona (kota lain)", value=False, key="mp_luas",
+                 help="Default hanya KOL/portal yang pernah bekerja untuk toko ini atau toko lain di kota yang sama.")
+rec = A.recommend_for_store(store_id, k=8, perluas_zona=luas)
 if rec.empty:
-    st.info("Belum ada KOL yang memenuhi syarat (aktif & skor ≥ 50).")
+    st.info("Belum ada KOL / portal yang pernah bekerja untuk toko / kota ini"
+            + ("" if luas else " — coba aktifkan 'Perluas ke satu zona'") + ". Tambahkan lewat Request KOL / Portal "
+            "atau impor data KOL yang memuat toko ini.")
     st.stop()
 rec_show = pd.DataFrame({
-    "Pilih": False, "KOL": rec["username"], "Platform": rec["platform"], "Kategori": rec["kategori"],
-    "Audiens lokal": rec["audiens_lokal"] * 100, "Skor": rec["skor"].round(0),
+    "Pilih": False, "KOL": rec["username"], "Jenis": rec["tipe"].str.upper(), "Kategori": rec["kategori"],
+    "Wilayah": rec["area_ket"], "Kedekatan area": rec["audiens_lokal"] * 100, "Skor": rec["skor"].round(0),
     "Prediksi kunjungan": [f"+{F.angka(a)} – {F.angka(b)}" for a, b in zip(rec["prediksi_low"], rec["prediksi_high"])],
     "Saran harga": rec["harga_wajar"], "Ratecard": rec["harga"], "Alasan": rec["alasan"].map(" · ".join), "id": rec["id"]})
 edited = st.data_editor(rec_show, hide_index=True, use_container_width=True, disabled=[c for c in rec_show.columns if c != "Pilih"],
-                        column_config={"id": None, "Audiens lokal": st.column_config.NumberColumn(format="%.0f%%"),
+                        column_config={"id": None, "Kedekatan area": st.column_config.NumberColumn(format="%.0f%%"),
                                        "Skor": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%d"),
                                        "Saran harga": st.column_config.NumberColumn(format="Rp %d"),
                                        "Ratecard": st.column_config.NumberColumn(format="Rp %d")}, key=f"rec_{store_id}")
-ui.note("Rank = 0,35·audiens lokal + 0,25·skor + 0,25·lift historis toko/zona + 0,15·kemiripan konten dengan kebutuhan dari social "
-        "listening; KOL baru dieksplorasi dengan Thompson sampling; MMR mencegah audiens tumpang tindih > 60%.")
+ui.note("Hanya KOL/portal yang wilayahnya sesuai yang disarankan: pernah bekerja untuk toko ini (kedekatan 100%), di kota yang "
+        "sama (75%), atau — bila diperluas — di zona yang sama (45%). Rank = 0,35·kedekatan area + 0,25·skor + 0,25·lift historis + 0,15·kecocokan "
+        "konten dengan kebutuhan toko; MMR mencegah audiens tumpang tindih > 60%.")
 
 if can(user["role"], "campaign.edit"):
     picked = edited[edited["Pilih"]]

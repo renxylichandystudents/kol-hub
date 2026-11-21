@@ -46,7 +46,7 @@ else:
             k = kt[kt["id"] == r["kol_id"]]
             if not k.empty:
                 k = k.iloc[0]
-                st.markdown(f"**{k['username']}** · {k['platform']} · skor {k['skor']:.0f} ({k['label']}) · audiens lokal {k['audiens_lokal'] * 100:.0f}%  \n"
+                st.markdown(f"**{k['username']}** · {k['platform']} · skor {k['skor']:.0f} ({k['label']}) · {k['area_ket'] or 'di luar area toko ini'}  \n"
                             f"Ratecard {F.rupiah(k['harga'])} · harga wajar {F.rupiah(k['harga_wajar'])} · batas nego {F.rupiah(k['batas_nego'])}")
     with right:
         st.markdown("#### Cek sistem")

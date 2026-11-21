@@ -37,7 +37,7 @@ for k in chosen:
     on_time = (kp["telat_hari"] == 0).mean() * 100 if len(kp) else None
     rows[labels[k].split(" — ")[0]] = {
         "Skor": r["skor"], "ER terkoreksi (%)": r["er_adj"], "Ekspektasi views": r["views_q50"],
-        "Konsistensi (1 − CV)": r["konsistensi"], "Audiens lokal toko (%)": r["audiens_lokal"] * 100,
+        "Konsistensi (1 − CV)": r["konsistensi"], "Kedekatan area toko (%)": r["audiens_lokal"] * 100,
         "Saran harga (Rp)": r["harga_wajar"], "Biaya per 1.000 views (Rp)": r["cpm_harapan"],
         "Lift historis (%)": (r["lift_hist"] * 100) if r["lift_hist"] == r["lift_hist"] and r["lift_hist"] is not None else None,
         "Prediksi kunjungan tambahan": pred.get("kunjungan"),
@@ -45,7 +45,7 @@ for k in chosen:
         "Ketepatan jadwal (%)": on_time,
     }
 tbl = pd.DataFrame(rows).apply(pd.to_numeric, errors="coerce")
-higher_better = {"Skor", "ER terkoreksi (%)", "Ekspektasi views", "Konsistensi (1 − CV)", "Audiens lokal toko (%)", "Lift historis (%)",
+higher_better = {"Skor", "ER terkoreksi (%)", "Ekspektasi views", "Konsistensi (1 − CV)", "Kedekatan area toko (%)", "Lift historis (%)",
                  "Prediksi kunjungan tambahan", "Ketepatan jadwal (%)"}
 lower_better = {"Saran harga (Rp)", "Biaya per 1.000 views (Rp)"}
 
@@ -69,7 +69,7 @@ ranked = [i for i in tbl.index if i in higher_better | lower_better and tbl.loc[
 wins = {n: sum(1 for i in ranked if tbl.loc[i, n] == (tbl.loc[i].max() if i in higher_better else tbl.loc[i].min())) for n in names}
 leader = max(wins, key=wins.get)
 eff = tbl.loc["Biaya per 1.000 views (Rp)"].idxmin()
-loc = tbl.loc["Audiens lokal toko (%)"].idxmax()
+loc = tbl.loc["Kedekatan area toko (%)"].idxmax()
 st.markdown(f"- **{leader}** unggul di {wins[leader]} metrik.\n- Paling efisien biaya: **{eff}**.\n- Audiens paling lokal untuk {ssel}: **{loc}**.")
 best_pair, best_val = None, -1
 for a, b in combinations(chosen, 2):

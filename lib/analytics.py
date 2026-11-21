@@ -378,6 +378,34 @@ def paid_history() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=TTL, show_spinner=False)
+def kol_area() -> pd.DataFrame:
+    """Wilayah kerja tiap KOL/portal dari riwayat penugasan (toko, kota, zona) — dasar mapping KOL per area."""
+    return db.df("""SELECT i.kol_id, i.store_id, st.nama AS toko, st.kota, st.zone_id, z.nama AS zona, COUNT(*) AS n,
+                           MAX(i.tanggal_posting) AS terakhir
+                    FROM submission_items i JOIN stores st ON st.id=i.store_id JOIN zones z ON z.id=st.zone_id
+                    WHERE i.aktif GROUP BY i.kol_id, i.store_id, st.nama, st.kota, st.zone_id, z.nama""")
+
+
+AREA_BOBOT = {"toko": 1.0, "kota": 0.75, "zona": 0.45}
+
+
+def area_match(area: pd.DataFrame, kol_id: int, kota_domisili: str | None, store_id: int | None, target_city: str | None,
+               zone_id: int | None) -> tuple[str | None, str]:
+    """Tingkat kecocokan wilayah KOL terhadap toko/zona target: 'toko' > 'kota' > 'zona' > None (di luar area)."""
+    a = area[area["kol_id"] == kol_id] if not area.empty else area
+    if store_id and not a.empty and (a["store_id"] == store_id).any():
+        n = int(a.loc[a["store_id"] == store_id, "n"].sum())
+        return "toko", f"pernah {n}× untuk toko ini"
+    if target_city and ((not a.empty and (a["kota"] == target_city).any()) or (kota_domisili or "").lower() == target_city.lower()):
+        tk = ", ".join(sorted(a.loc[a["kota"] == target_city, "toko"].str.replace("Mitra10 ", "").unique())) if not a.empty else ""
+        return "kota", f"area {target_city}" + (f" ({tk})" if tk else "")
+    if zone_id and not a.empty and (a["zone_id"] == zone_id).any():
+        tk = ", ".join(sorted(a.loc[a["zone_id"] == zone_id, "toko"].str.replace("Mitra10 ", "").unique())[:3])
+        return "zona", f"zona {a.loc[a['zone_id'] == zone_id, 'zona'].iloc[0]} ({tk})"
+    return None, ""
+
+
+@st.cache_data(ttl=TTL, show_spinner=False)
 def kol_table(store_id: int | None = None, zone_id: int | None = None) -> pd.DataFrame:
     """Fitur, skor (rumus 7), saran harga (5), deteksi kenaikan harga (6) — opsional dihitung ulang untuk toko/zona."""
     k = kol_base()
@@ -396,6 +424,10 @@ def kol_table(store_id: int | None = None, zone_id: int | None = None) -> pd.Dat
         target_zone_cities = zone_cities.get(zone_id, set())
     targets = cpm_targets(k, posts)
     vrate = view_rates(k)
+    area = kol_area()
+    area_names = (area.groupby("kol_id")["toko"].apply(lambda x: ", ".join(sorted(set(x.str.replace("Mitra10 ", "")))))
+                  .to_dict() if not area.empty else {})
+    area_zona = (area.groupby("kol_id")["zona"].apply(lambda x: ", ".join(sorted(set(x)))).to_dict() if not area.empty else {})
     paid = paid_history()
     paid_by = paid.sort_values("tgl").groupby("kol_id")["harga"].apply(lambda x: list(x.astype(float))).to_dict() if not paid.empty else {}
 
@@ -444,6 +476,11 @@ def kol_table(store_id: int | None = None, zone_id: int | None = None) -> pd.Dat
             lokal = sum(v for c, v in aud.items() if c in target_zone_cities)
         else:
             lokal = max([v for c, v in aud.items() if c != "Lainnya"] or [0])
+        if store_id or zone_id:
+            lvl, area_ket = area_match(area, r["id"], r["kota_domisili"], store_id, target_city, zone_id)
+            lokal = max(lokal, AREA_BOBOT.get(lvl, 0.0))
+        else:
+            lvl, area_ket = None, ""
         kl = lifts[lifts["kol_id"] == r["id"]] if not lifts.empty else pd.DataFrame()
         if not kl.empty and store_id and (kl["store_id"] == store_id).any():
             kl_scope = kl[kl["store_id"] == store_id]
@@ -465,7 +502,8 @@ def kol_table(store_id: int | None = None, zone_id: int | None = None) -> pd.Dat
             "harga": harga, "deliverable": r["deliverable"], "cpm_target": cpm_t, "cpm_harapan": exp_cpm,
             "efisiensi": (cpm_t / exp_cpm) if exp_cpm else None,
             "harga_wajar": price.wajar, "batas_nego": price.batas_atas, "dasar_harga": dasar, "harga_historis": harga_hist,
-            "audiens_lokal": lokal, "audiens": aud, "lift_hist": lift_hist, "extra_hist": extra_hist, "cpiv": cpiv,
+            "audiens_lokal": lokal, "audiens": aud, "area_level": lvl, "area_ket": area_ket,
+            "area_toko": area_names.get(r["id"], ""), "area_zona": area_zona.get(r["id"], ""), "lift_hist": lift_hist, "extra_hist": extra_hist, "cpiv": cpiv,
             "telat": int((kp["telat_hari"] > 0).sum()) if not kp.empty else 0,
             "bukti_kurang": int(kp["bukti_kurang"].sum()) if not kp.empty and "bukti_kurang" in kp else 0,
             "kerja_sama": int(len(kp)), "terakhir": last_used,
@@ -611,11 +649,15 @@ def _similarity(a: str, b: str) -> float:
     return min(1.0, 0.3 + len(ta & tb) / math.sqrt(len(ta) * len(tb)))
 
 
-def recommend_for_store(store_id: int, k: int = 8, seed: int | None = None) -> pd.DataFrame:
+def recommend_for_store(store_id: int, k: int = 8, seed: int | None = None, perluas_zona: bool = False) -> pd.DataFrame:
     kt = kol_table(store_id=store_id)
     if kt.empty:
         return kt
-    kt = kt[(kt["status"] == "aktif") & (kt["skor"] >= 50)].copy()
+    # hanya KOL/portal yang wilayahnya sesuai: pernah untuk toko ini atau kota yang sama (opsional: satu zona)
+    levels = ("toko", "kota", "zona") if perluas_zona else ("toko", "kota")
+    kt = kt[(kt["status"] == "aktif") & kt["area_level"].isin(levels)].copy()
+    if (kt["skor"] >= 50).sum() >= k:
+        kt = kt[kt["skor"] >= 50]
     need_text = store_need_text(store_id) or "renovasi rumah promo cat keramik dapur kamar mandi"
     base = store_baseline_table()
     b = base[base["store_id"] == store_id]
@@ -630,8 +672,8 @@ def recommend_for_store(store_id: int, k: int = 8, seed: int | None = None) -> p
         lift_exp = 0.5 * lift_exp + 0.5 * lift_exp * min(1.0, r["audiens_lokal"] / 0.4)
         extra = weekly_base * 2 * lift_exp
         lo, hi = extra * (0.6 if not r["data_terbatas"] else 0.4), extra * (1.25 if not r["data_terbatas"] else 1.6)
-        alasan = []
-        if r["audiens_lokal"] >= 0.3:
+        alasan = [r["area_ket"]] if r.get("area_ket") else []
+        if r["audiens_lokal"] >= 0.3 and r["audiens"]:
             alasan.append(f"audiens lokal {r['audiens_lokal'] * 100:.0f}%")
         if r["lift_hist"] is not None and not pd.isna(r["lift_hist"]):
             alasan.append(f"lift historis {F.persen(r['lift_hist'] * 100, tanda=True)}")
