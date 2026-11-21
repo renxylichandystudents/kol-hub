@@ -47,22 +47,25 @@ ui.kpis([{"label": "Konten tayang", "value": str(len(res)), "sub": f"{res['toko'
 tz, tt, tc, tb = st.tabs(["Per zona", "Per toko", "Per KOL", "Bukti tayang"])
 agg = dict(konten=("item_id", "count"), biaya=("biaya", "sum"), views=("views", "sum"), kunjungan=("kunjungan_item", "sum"), lift=("lift", "mean"))
 cc = {"biaya": st.column_config.NumberColumn(format="Rp %d"), "views": st.column_config.NumberColumn(format="%d"),
-      "kunjungan": st.column_config.NumberColumn("Kunjungan tambahan", format="%d"), "lift": st.column_config.NumberColumn("Lift rata-rata", format="%.3f")}
+      "kunjungan": st.column_config.NumberColumn("Kunjungan tambahan", format="%d"), "lift": st.column_config.NumberColumn("Lift rata-rata", format="%+.0f%%")}
 with tz:
     z = res.groupby("zona").agg(**agg).reset_index()
+    z["lift"] = pd.to_numeric(z["lift"], errors="coerce") * 100
     z["CPIV"] = [F.cpiv(b, k) for b, k in zip(z["biaya"], z["kunjungan"])]
     st.dataframe(z, hide_index=True, use_container_width=True, column_config={**cc, "CPIV": st.column_config.NumberColumn(format="Rp %d")})
 with tt:
     t = res.groupby(["zona", "toko"]).agg(**agg).reset_index()
+    t["lift"] = pd.to_numeric(t["lift"], errors="coerce") * 100
     t["CPIV"] = [F.cpiv(b, k) for b, k in zip(t["biaya"], t["kunjungan"])]
     st.dataframe(t, hide_index=True, use_container_width=True, column_config={**cc, "CPIV": st.column_config.NumberColumn(format="Rp %d")})
     st.download_button("Unduh Excel per toko", docs.to_excel(t, "per_toko"), file_name="report_per_toko.xlsx")
 with tc:
-    k = res[["campaign", "username", "platform", "toko", "tanggal_posting", "biaya", "views", "ER", "CPM", "lift", "keyakinan", "telat_hari"]]
+    k = res[["campaign", "username", "platform", "toko", "tanggal_posting", "biaya", "views", "ER", "CPM", "lift", "keyakinan", "telat_hari"]].copy()
+    k["lift"] = pd.to_numeric(k["lift"], errors="coerce") * 100
     st.dataframe(k, hide_index=True, use_container_width=True, column_config={
         "biaya": st.column_config.NumberColumn(format="Rp %d"), "views": st.column_config.NumberColumn(format="%d"),
         "ER": st.column_config.NumberColumn(format="%.1f%%"), "CPM": st.column_config.NumberColumn(format="Rp %d"),
-        "lift": st.column_config.NumberColumn(format="%.3f")})
+        "lift": st.column_config.NumberColumn("Lift", format="%+.0f%%")})
 with tb:
     ui.note("Bukti tayang diunggah oleh Digital Marketing; status & unggah ada di menu 'Bukti Tayang & Status RO'.")
     st.dataframe(res[["username", "toko", "tanggal_posting", "link", "bukti_nama", "insight_nama", "views", "sumber"]], hide_index=True,

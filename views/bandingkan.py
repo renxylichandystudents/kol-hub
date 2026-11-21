@@ -59,7 +59,7 @@ def hl(row):
 
 
 st.dataframe(tbl.style.apply(hl, axis=1).format(lambda v: "—" if v is None or pd.isna(v) else
-                                                  (f"{v:,.0f}".replace(",", ".") if abs(v) >= 100 else f"{v:,.2f}".replace(".", ","))),
+                                                  f"{round(v):,}".replace(",", ".")),
              use_container_width=True, height=440)
 ui.note("Sentimen konten kerja sama akan terisi setelah komentar posting KOL tersinkron dari API (job sync_social).")
 

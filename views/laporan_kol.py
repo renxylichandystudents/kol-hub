@@ -17,17 +17,14 @@ ui.header("Laporan Performa KOL & Portal",
 ui.flash()
 
 c = st.columns([1.3, 1.2, 1.2, 1.4, 2])
-periode = c[0].selectbox("Periode", ["Tahun ini", "6 bulan terakhir", "3 bulan terakhir", "Semua"])
 today = date.today()
-start = {"Tahun ini": date(today.year, 1, 1), "6 bulan terakhir": today.replace(day=1) - pd.DateOffset(months=5),
-         "3 bulan terakhir": today.replace(day=1) - pd.DateOffset(months=2), "Semua": None}[periode]
-start = start.date() if hasattr(start, "date") else start
+start, end = ui.date_range("Periode tayang", date(today.year, 1, 1), today, key="lap_range", container=c[0])
 tipe = c[1].selectbox("Jenis", ["Semua", "KOL", "Portal"])
 kep = c[2].selectbox("Keputusan", ["Semua", "Lanjutkan", "Evaluasi", "Stop", "Data belum cukup"])
 zona = c[3].selectbox("Zona", ["Semua"] + list(ui.zones()["nama"]))
 q = c[4].text_input("Cari akun / toko")
 
-s = R.kol_summary(start, None)
+s = R.kol_summary(start, end)
 if s.empty:
     st.info("Belum ada kerja sama yang tercatat. Impor file Excel KOL & Portal terlebih dahulu.")
     st.stop()
@@ -77,7 +74,7 @@ with tab_tbl:
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="xlsxwriter") as xw:
         show.to_excel(xw, sheet_name="Ringkasan", index=False)
-        R.post_level(start, None).drop(columns=["item_id"], errors="ignore").to_excel(xw, sheet_name="Per posting", index=False)
+        R.post_level(start, end).drop(columns=["item_id"], errors="ignore").to_excel(xw, sheet_name="Per posting", index=False)
     st.download_button("Unduh laporan (Excel)", buf.getvalue(), file_name=f"laporan_kol_{today:%Y%m%d}.xlsx", icon=":material/download:")
 
 with tab_det:
@@ -92,13 +89,13 @@ with tab_det:
         k2.metric("Views total", F.angka(r["views"]) if pd.notna(r["views"]) else "—")
         k3.metric("CPM", F.rupiah(r["cpm"]) if pd.notna(r["cpm"]) else "—")
         k4.metric("Follower terbaru", F.angka(r["follower_terbaru"]) if pd.notna(r["follower_terbaru"]) else "—",
-                  f"{r['follower_growth']:+.1f}%" if pd.notna(r["follower_growth"]) else None)
+                  f"{round(r['follower_growth']):+d}%" if pd.notna(r["follower_growth"]) else None)
         ft = R.follower_trend()
         ft = ft[ft["kol_id"] == pick].dropna(subset=["follower"])
         if len(ft) >= 2:
             st.markdown("**Tren follower**")
             st.line_chart(ft.set_index("tanggal")["follower"], height=200)
-        p = R.post_level(start, None)
+        p = R.post_level(start, end)
         p = p[p["kol_id"] == pick].sort_values("tanggal", ascending=False)
         st.markdown("**Riwayat posting**")
         st.dataframe(pd.DataFrame({"Tanggal": p["tanggal"], "Campaign": p["campaign"], "Toko": p["toko"], "Konten": p["deliverable"],
@@ -113,7 +110,7 @@ with tab_bm:
     st.dataframe(bm.rename(columns={"tipe": "Jenis", "akun": "Akun", "biaya": "Biaya", "views": "Views", "cpm_median": "CPM median",
                                     "er_median": "ER median %"}), hide_index=True, use_container_width=True,
                  column_config={"Biaya": st.column_config.NumberColumn(format="Rp %d"), "CPM median": st.column_config.NumberColumn(format="Rp %d")})
-    zt = R.post_level(start, None)
+    zt = R.post_level(start, end)
     if not zt.empty:
         z = zt.groupby(["zona", "tipe"]).agg(biaya=("biaya", "sum"), posting=("item_id", "size"), views=("views_total", "sum")).reset_index()
         z["CPM"] = z["biaya"] / z["views"].where(z["views"] > 0) * 1000

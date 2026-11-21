@@ -1,4 +1,6 @@
 """Layar 4 — Performa Toko & Zona: online vs offline per zona dan toko."""
+from datetime import date
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -20,11 +22,13 @@ stores = ui.stores()
 ma = A.monthly_achievement()
 if not ma.empty:
     ma = ma[ma["store_id"].isin(sids)]
-    years = sorted(ma["bulan"].dt.year.unique(), reverse=True)
     st.markdown("#### Achievement traffic vs budget & tahun lalu")
     yc, vc = st.columns([1, 3])
-    yr = yc.selectbox("Tahun", years, key="ach_year")
-    cur = ma[ma["bulan"].dt.year == yr]
+    today = date.today()
+    p0, p1 = ui.date_range("Periode", date(today.year, 1, 1), today, key="ach_range", container=yc)
+    yc.caption("Data traffic & budget bulanan: bulan yang tercakup periode dihitung penuh.")
+    yr = f"{p0:%d/%m/%Y} – {p1:%d/%m/%Y}"
+    cur = ma[(ma["bulan"] >= pd.Timestamp(p0.replace(day=1))) & (ma["bulan"] <= pd.Timestamp(p1))]
     done = cur[cur["aktual"].notna()]
     nat = cur.groupby("bulan").agg(aktual=("aktual", "sum"), budget=("budget", "sum"), ly=("ly", "sum"),
                                    biaya_kol=("biaya_kol", "sum")).reset_index()
@@ -33,17 +37,17 @@ if not ma.empty:
     ach_ytd = ytd["aktual"].sum() / ytd["budget"].sum() * 100 if ytd["budget"].sum() else None
     gr_ytd = (ytd["aktual"].sum() / ytd["ly"].sum() - 1) * 100 if ytd["ly"].sum() else None
     ui.kpis([
-        {"label": f"Traffic aktual {yr} (YTD)", "value": F.angka(ytd["aktual"].sum()),
+        {"label": "Traffic aktual (periode)", "value": F.angka(ytd["aktual"].sum()),
          "sub": f"{len(ytd)} bulan · s.d. {ytd['bulan'].max():%b %Y}" if not ytd.empty else "belum ada aktual"},
         {"label": "Achievement vs budget", "value": F.persen(ach_ytd) if ach_ytd is not None else "—",
-         "sub": f"budget YTD {F.angka(ytd['budget'].sum())}", "highlight": True,
+         "sub": f"budget traffic {F.angka(ytd['budget'].sum())} kunjungan", "highlight": True,
          "tone": "pos" if (ach_ytd or 0) >= 100 else "neg"},
         {"label": "Growth vs tahun lalu", "value": F.persen(gr_ytd, tanda=True) if gr_ytd is not None else "—",
          "sub": f"LY {F.angka(ytd['ly'].sum())}", "tone": "pos" if (gr_ytd or 0) >= 0 else "neg"},
-        {"label": "Toko achieve ≥ 100% (YTD)", "value": str(int((done.groupby("store_id").apply(
+        {"label": "Toko achieve ≥ 100%", "value": str(int((done.groupby("store_id").apply(
             lambda g: g["aktual"].sum() / g["budget"].sum() if g["budget"].sum() else 0) >= 1).sum())) if not done.empty else "—",
          "sub": f"dari {done['store_id'].nunique()} toko"},
-        {"label": f"Biaya KOL & portal {yr}", "value": F.rupiah(nat["biaya_kol"].sum()), "sub": "dari campaign yang tayang"},
+        {"label": "Biaya KOL & portal", "value": F.rupiah(nat["biaya_kol"].sum()), "sub": "campaign tayang pada periode ini"},
     ])
     st.write("")
     chart = nat.assign(Bulan=nat["bulan"].dt.strftime("%m·%b")).set_index("Bulan")[["aktual", "budget", "ly"]].rename(
@@ -63,7 +67,7 @@ if not ma.empty:
            "Growth vs LY %": st.column_config.NumberColumn(format="%+.1f%%"),
            "Biaya KOL (Rp)": st.column_config.NumberColumn(format="localized"),
            "Biaya KOL per 1.000 traffic": st.column_config.NumberColumn("Biaya KOL / 1.000 traffic (Rp)", format="localized")}
-    ren = {"zona": "Zona", "toko": "Toko", "aktual": "Traffic aktual", "budget_ytd": "Budget (bulan teraktual)", "ly": "Tahun lalu",
+    ren = {"zona": "Zona", "toko": "Toko", "aktual": "Traffic aktual", "budget_ytd": "Budget traffic", "ly": "Traffic tahun lalu",
            "biaya_kol": "Biaya KOL (Rp)", "posting": "Posting KOL"}
     with t_z:
         z = _ach(done, ["zona"]).rename(columns=ren)
@@ -74,7 +78,8 @@ if not ma.empty:
         piv = cur.pivot_table(index="toko", columns=cur["bulan"].dt.strftime("%m·%b"), values="ach", aggfunc="mean")
         with st.expander("Achievement % per bulan per toko"):
             st.dataframe(piv.round(1), use_container_width=True)
-    ui.note("Achievement = traffic aktual ÷ budget traffic bulan yang sama; YTD hanya menghitung bulan yang sudah ada aktualnya. "
+    ui.note("Semua angka traffic = jumlah kunjungan (bukan sales). Achievement = traffic aktual ÷ budget traffic bulan yang sama; "
+            "hanya bulan yang sudah ada aktualnya yang dihitung. "
             "Growth dibanding bulan yang sama tahun lalu. Biaya KOL per 1.000 traffic membantu melihat toko mana yang mahal "
             "dibanding traffic-nya.")
     st.divider()

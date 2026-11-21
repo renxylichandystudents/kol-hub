@@ -129,9 +129,9 @@ def test_saturation_curve():
 
 
 def test_format():
-    assert F.rupiah(10_750_000) == "Rp 10,8 jt"
+    assert F.rupiah(10_750_000) == "Rp 10.750.000"
     assert F.rupiah(3100) == "Rp 3.100"
-    assert F.angka(1_240_000) == "1,24 jt"
-    assert F.persen(21.2, tanda=True) == "+21,2%"
+    assert F.angka(1_240_000) == "1.240.000"
+    assert F.persen(21.2, tanda=True) == "+21%"
     assert F.percentile_rank(5, [1, 2, 3, 4, 5]) == pytest.approx(90)
     assert not math.isnan(F.percentile_rank(1, []))

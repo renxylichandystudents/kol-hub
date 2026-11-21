@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import html
+import re
 from datetime import date, timedelta
 
 import pandas as pd
@@ -53,8 +54,8 @@ section[data-testid="stSidebar"] [data-baseweb="select"] > div{background:#1f2b4
 """
 
 
-# ------------------------------------------------------------------ format angka (pemisah ribuan di semua tabel)
-_PLAIN_FMT = {"%d", "%.0f", "%i", "Rp %d", "Rp %.0f", "%,d"}
+# ------------------------------------------------------------------ format angka (bilangan bulat + pemisah ribuan di semua tabel)
+_INT_FMT = {"%d", "%.0f", "%i", "Rp %d", "Rp %.0f", "%,d", "localized"}
 _SKIP_COLS = {"tahun", "year", "id", "no", "kode", "baris_ke", "dow", "jam", "slot"}
 
 
@@ -63,39 +64,64 @@ def _skip(col) -> bool:
     return c in _SKIP_COLS or c.endswith("_id") or c.startswith("id ")
 
 
-def number_config(data, column_config: dict | None) -> dict | None:
-    """Tambahkan format 'localized' (1.234.567 di browser berbahasa Indonesia) ke kolom angka tanpa format,
-    dan ganti format printf polos ('%d', 'Rp %d') yang tidak memakai pemisah ribuan."""
+def number_config(data, column_config: dict | None) -> tuple[dict | None, list]:
+    """Semua angka tampil sebagai bilangan bulat dengan pemisah ribuan (format 'localized' → 1.234.567 di browser
+    Indonesia). Persen dibulatkan tanpa desimal. Return (column_config, kolom yang datanya perlu dibulatkan)."""
     cfg = dict(column_config or {})
+    to_round = []
     for k, v in list(cfg.items()):
-        if isinstance(v, dict) and isinstance(v.get("type_config"), dict) and v["type_config"].get("type") == "number":
-            fmt = v["type_config"].get("format")
-            if fmt in _PLAIN_FMT:
-                v = {**v, "type_config": {**v["type_config"], "format": "localized"}}
-                if fmt.startswith("Rp") and "rp" not in str(v.get("label") or k).lower():
-                    v["label"] = f"{v.get('label') or k} (Rp)"
-                cfg[k] = v
+        if not (isinstance(v, dict) and isinstance(v.get("type_config"), dict)):
+            continue
+        tc = v["type_config"]
+        if tc.get("type") not in ("number", "progress"):
+            continue
+        fmt = tc.get("format")
+        if tc.get("type") == "number" and (fmt in _INT_FMT or fmt is None):
+            v = {**v, "type_config": {**tc, "format": "localized"}}
+            if fmt and fmt.startswith("Rp") and "rp" not in str(v.get("label") or k).lower():
+                v["label"] = f"{v.get('label') or k} (Rp)"
+            to_round.append(k)
+        elif fmt and re.fullmatch(r"%\+?\.\d+f%%", fmt):
+            v = {**v, "type_config": {**tc, "format": re.sub(r"\.\d+f", ".0f", fmt)}}
+        cfg[k] = v
     if isinstance(data, pd.DataFrame):
         for col in data.columns:
             if col in cfg or _skip(col):
                 continue
             dt = data[col].dtype
-            if pd.api.types.is_numeric_dtype(dt) and not pd.api.types.is_bool_dtype(dt):
-                cfg[col] = st.column_config.NumberColumn(format="localized")
-            elif dt == object:
+            numeric = pd.api.types.is_numeric_dtype(dt) and not pd.api.types.is_bool_dtype(dt)
+            if not numeric and dt == object:
                 s = data[col].dropna()
-                if len(s) and s.map(lambda x: isinstance(x, (int, float)) and not isinstance(x, bool)).all():
-                    cfg[col] = st.column_config.NumberColumn(format="localized")
-    return cfg or None
+                numeric = bool(len(s)) and s.map(lambda x: isinstance(x, (int, float)) and not isinstance(x, bool)).all()
+            if numeric:
+                cfg[col] = st.column_config.NumberColumn(format="localized")
+                to_round.append(col)
+    return (cfg or None), to_round
 
 
-def _wrap(fn):
+def _round_cols(data, cols):
+    if not isinstance(data, pd.DataFrame) or not cols:
+        return data
+    cols = [c for c in cols if c in data.columns]
+    need = [c for c in cols if pd.api.types.is_float_dtype(data[c].dtype) or data[c].dtype == object]
+    if not need:
+        return data
+    data = data.copy()
+    for c in need:
+        data[c] = pd.to_numeric(data[c], errors="coerce").round(0).astype("Int64")
+    return data
+
+
+def _wrap(fn, editor: bool = False):
     if getattr(fn, "_kh_wrapped", False):
         return fn
 
     def inner(data=None, *args, **kwargs):
         try:
-            kwargs["column_config"] = number_config(data, kwargs.get("column_config"))
+            cfg, rnd = number_config(data, kwargs.get("column_config"))
+            kwargs["column_config"] = cfg
+            if not editor:  # data_editor: jangan ubah tipe data yang dikembalikan ke kode
+                data = _round_cols(data, rnd)
         except Exception:  # noqa: BLE001 — format gagal tidak boleh menghentikan layar
             pass
         return fn(data, *args, **kwargs)
@@ -103,10 +129,24 @@ def _wrap(fn):
     return inner
 
 
+def date_range(label: str, default_start: date, default_end: date, key: str, max_value: date | None = None,
+               container=None) -> tuple[date, date]:
+    """Pemilih periode berbentuk kalender (klik tanggal mulai lalu tanggal selesai)."""
+    box = container or st
+    v = box.date_input(label, value=(default_start, default_end), max_value=max_value, format="DD/MM/YYYY", key=key)
+    if isinstance(v, (tuple, list)):
+        if len(v) == 2:
+            return v[0], v[1]
+        if len(v) == 1:
+            return v[0], v[0]
+        return default_start, default_end
+    return v, v
+
+
 def setup():
     st.markdown(CSS, unsafe_allow_html=True)
     st.dataframe = _wrap(st.dataframe)
-    st.data_editor = _wrap(st.data_editor)
+    st.data_editor = _wrap(st.data_editor, editor=True)
 
 
 def esc(x) -> str:
@@ -227,17 +267,8 @@ def global_filters(user: dict, show_period: bool = True, key: str = "g") -> dict
            "single_store": len(store_ids) == 1, "all": len(store_ids) == len(s)}
     if show_period:
         today = date.today()
-        opts = {"30 hari terakhir": 30, "Bulan berjalan": "mtd", "Bulan lalu": "last", "90 hari terakhir": 90}
-        p = cols[2].selectbox("Periode", list(opts), key="f_period")
-        v = opts[p]
-        if v == "mtd":
-            start, end = today.replace(day=1), today
-        elif v == "last":
-            end = today.replace(day=1) - timedelta(days=1)
-            start = end.replace(day=1)
-        else:
-            start, end = today - timedelta(days=v), today
-        out.update({"start": start, "end": end, "period_label": p})
+        start, end = date_range("Periode", today - timedelta(days=30), today, key=f"{key}_periode", container=cols[2])
+        out.update({"start": start, "end": end, "period_label": f"{start:%d/%m/%Y} – {end:%d/%m/%Y}"})
     return out
 
 

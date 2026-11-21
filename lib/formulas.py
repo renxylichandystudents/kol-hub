@@ -356,29 +356,25 @@ def tax_amount(bruto: float, badan_hukum: bool, punya_npwp: bool, rules: dict) -
 
 
 # ---------------------------------------------------------------- format
+def _ribuan(x: float) -> str:
+    """Bilangan bulat dengan titik pemisah ribuan (1.344.744.000) — tanpa desimal."""
+    return f"{round(x):,}".replace(",", ".")
+
+
 def rupiah(x: float | None, singkat: bool = True) -> str:
+    """Selalu bilangan bulat penuh (tanpa 'jt'/'M' & desimal) agar tidak membingungkan titik/koma."""
     if x is None or (isinstance(x, float) and math.isnan(x)):
         return "—"
-    x = float(x)
-    if singkat and abs(x) >= 1e9:
-        return f"Rp {x / 1e9:,.2f} M".replace(",", "#").replace(".", ",").replace("#", ".")
-    if singkat and abs(x) >= 1e6:
-        return f"Rp {x / 1e6:,.1f} jt".replace(",", "#").replace(".", ",").replace("#", ".")
-    return f"Rp {x:,.0f}".replace(",", ".")
+    return "Rp " + _ribuan(float(x))
 
 
 def angka(x: float | None, singkat: bool = True) -> str:
     if x is None or (isinstance(x, float) and math.isnan(x)):
         return "—"
-    x = float(x)
-    if singkat and abs(x) >= 1e6:
-        return f"{x / 1e6:,.2f} jt".replace(",", "#").replace(".", ",").replace("#", ".")
-    if singkat and abs(x) >= 1e3:
-        return f"{x / 1e3:,.1f} rb".replace(",", "#").replace(".", ",").replace("#", ".")
-    return f"{x:,.0f}".replace(",", ".")
+    return _ribuan(float(x))
 
 
-def persen(x: float | None, desimal: int = 1, tanda: bool = False) -> str:
+def persen(x: float | None, desimal: int = 0, tanda: bool = False) -> str:
     if x is None or (isinstance(x, float) and math.isnan(x)):
         return "—"
     s = f"{x:+.{desimal}f}%" if tanda else f"{x:.{desimal}f}%"

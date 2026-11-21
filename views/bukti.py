@@ -49,7 +49,7 @@ elif only == "Selisih OCR > 5%":
 show = pd.DataFrame({"KOL": v["username"], "Toko": v["toko"], "Jadwal": v["tanggal_posting"], "Tayang": v["tanggal_tayang"],
                      "Bukti": v["bukti_nama"].notna().map({True: "✓", False: "—"}), "Link": v["link"],
                      "Insight": v["insight_nama"].notna().map({True: "✓", False: "—"}),
-                     "Selisih OCR vs API": v["selisih"].map(lambda x: "—" if x is None or pd.isna(x) else (f"⚠ {x:.1f}%" if x > 5 else f"{x:.1f}%")),
+                     "Selisih OCR vs API": v["selisih"].map(lambda x: "—" if x is None or pd.isna(x) else (f"⚠ {x:.0f}%" if x > 5 else f"{x:.1f}%")),
                      "No. RO": v["no_ro"], "Status RO": v["status_ro"], "Pembayaran": v["status_bayar"], "Alasan tertahan": v["alasan_tertahan"].fillna(""),
                      "Diupdate oleh": v["diupdate_oleh"].fillna("—"), "Waktu update": v["diupdate"]})
 st.dataframe(show, hide_index=True, use_container_width=True, height=400, column_config={
@@ -92,7 +92,7 @@ if can(user["role"], "proof.input"):
             if res["telat_hari"]:
                 msg += f" Tayang telat {res['telat_hari']} hari dari jadwal (masuk penalti skor)."
             if res["ditandai"]:
-                msg += f" ⚠ Selisih views dengan API {res['selisih_api_pct']:.1f}% (> 5%) — ditandai untuk dicek."
+                msg += f" ⚠ Selisih views dengan API {res['selisih_api_pct']:.0f}% (> 5%) — ditandai untuk dicek."
             st.session_state["flash_ok"] = msg
             st.rerun()
     if pd.notna(r["bukti_nama"]):

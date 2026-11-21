@@ -150,8 +150,11 @@ def _decide(s: pd.DataFrame) -> pd.DataFrame:
 def _fmt(n):
     if pd.isna(n):
         return "—"
-    n = float(n)
-    return f"{n / 1e6:.1f} jt" if n >= 1e6 else f"{n / 1e3:.1f} rb" if n >= 1e3 else f"{n:.0f}"
+    return f"{round(float(n)):,}".replace(",", ".")
+
+
+def _pct(x):
+    return "<1%" if 0 < x < 1 else f"{round(x)}%"
 
 
 def _insight(r) -> str:
@@ -159,14 +162,14 @@ def _insight(r) -> str:
     if r["posting_terukur"]:
         parts.append(f"{int(r['posting_terukur'])}/{int(r['kerja_sama'])} posting terukur, median {_fmt(r['views_median'])} views")
         if pd.notna(r["cpm"]):
-            parts.append(f"CPM Rp {r['cpm']:,.0f}".replace(",", "."))
+            parts.append(f"CPM Rp {_fmt(r['cpm'])}")
         if pd.notna(r["er_aktual"]):
-            k = f" (klaim {r['er_klaim']:.2f}%)" if pd.notna(r["er_klaim"]) else ""
-            parts.append(f"ER aktual {r['er_aktual']:.2f}%{k}")
+            k = f" (klaim {_pct(r['er_klaim'])})" if pd.notna(r["er_klaim"]) else ""
+            parts.append(f"ER aktual {_pct(r['er_aktual'])}{k}")
     else:
         parts.append(f"{int(r['kerja_sama'])} kerja sama, belum ada metrik posting")
     if pd.notna(r["follower_terbaru"]):
-        g = f", {r['follower_growth']:+.1f}% sejak data awal" if pd.notna(r["follower_growth"]) else ""
+        g = f", {round(r['follower_growth']):+d}% sejak data awal" if pd.notna(r["follower_growth"]) else ""
         parts.append(f"follower {_fmt(r['follower_terbaru'])}{g}")
     if r["catatan"]:
         parts.append("⚠ " + "; ".join(r["catatan"]))

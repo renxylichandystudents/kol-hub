@@ -71,7 +71,7 @@ with left:
     comp["Kontribusi"] = [r["kontribusi"].get(k) for k in "EKCRD"]
     st.dataframe(comp, hide_index=True, use_container_width=True, column_config={
         "Persentil": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f"),
-        "Bobot": st.column_config.NumberColumn(format="%.2f"), "Kontribusi": st.column_config.NumberColumn(format="%.1f")})
+        "Bobot": st.column_config.NumberColumn(format="%.2f"), "Kontribusi": st.column_config.NumberColumn(format="%.0f")})
     ui.note("Skor = 0,24·E + 0,16·K + 0,16·C + 0,24·R + 0,20·D − penalti (telat tayang −3/kejadian, bukti tidak lengkap −5). "
             "Bila belum ada data dampak, bobot D dibagi rata ke komponen lain.")
     k1, k2 = st.columns(2)
@@ -111,11 +111,11 @@ else:
     lifts = A.item_lifts()
     if not lifts.empty:
         kl = lifts[lifts["kol_id"] == kol_id][["tanggal", "lift"]].assign(tanggal=lambda x: x["tanggal"].dt.date)
-        hist = hist.merge(kl, on="tanggal", how="left")
+        hist = hist.merge(kl.assign(lift=kl["lift"] * 100), on="tanggal", how="left")
     st.dataframe(hist.drop(columns=["likes", "komentar", "share", "save"]), hide_index=True, use_container_width=True, column_config={
         "biaya": st.column_config.NumberColumn(format="Rp %d"), "views": st.column_config.NumberColumn(format="%d"),
         "ER": st.column_config.NumberColumn(format="%.1f%%"), "CPM": st.column_config.NumberColumn(format="Rp %d"),
-        "lift": st.column_config.NumberColumn(format="%.3f")})
+        "lift": st.column_config.NumberColumn("Lift", format="%+.0f%%")})
     st.caption(f"Jumlah kerja sama: {len(hist)} · terakhir {hist['tanggal'].max()}")
 
 if can(user["role"], "campaign.edit"):

@@ -139,7 +139,7 @@ with right:
         agg = d.groupby(["dow", "slot"]).agg(i=("interaksi", "sum"), v=("views", "sum")).reset_index()
         slots = {(hari[int(r.dow)], int(r.slot)): (float(r.i), float(r.v)) for r in agg.itertuples()}
         best = F.best_posting_slots(slots)[:3]
-        st.markdown(f"**{plat}:** " + " · ".join(f"{d_} {h:02d}.00 ({p * 100:.1f}% ER posterior)" for (d_, h), p in best))
+        st.markdown(f"**{plat}:** " + " · ".join(f"{d_} {h:02d}.00 ({p * 100:.0f}% ER posterior)" for (d_, h), p in best))
     upcoming = db.df("SELECT nama, mulai FROM promo_offline_events WHERE mulai >= CURRENT_DATE ORDER BY mulai LIMIT 3")
     for e in upcoming.itertuples():
         st.markdown(f"- Promo **{ui.esc(e.nama)}** mulai {e.mulai:%d %b}: jadwalkan tayang {e.mulai - timedelta(days=3):%d}–{e.mulai - timedelta(days=1):%d %b} "
