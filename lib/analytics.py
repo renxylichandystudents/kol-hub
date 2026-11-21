@@ -129,6 +129,60 @@ def forecast_series(store_id: int, weeks: int = 12) -> pd.DataFrame:
     return w
 
 
+# ====================================================================== achievement vs budget & tahun lalu
+@st.cache_data(ttl=TTL, show_spinner=False)
+def monthly_achievement() -> pd.DataFrame:
+    """Per toko per bulan: aktual, budget, achievement, aktual tahun lalu (LY) & growth; plus biaya KOL/portal bulan itu."""
+    m = db.df("""SELECT t.store_id, t.bulan, t.aktual, t.budget, ly.aktual AS ly, s.nama AS toko, s.zone_id, z.nama AS zona
+                 FROM traffic_monthly t JOIN stores s ON s.id=t.store_id JOIN zones z ON z.id=s.zone_id
+                 LEFT JOIN traffic_monthly ly ON ly.store_id=t.store_id AND ly.bulan = (t.bulan - INTERVAL '1 year')::date""")
+    if m.empty:
+        return m
+    spend = db.df("""SELECT i.store_id, date_trunc('month', i.tanggal_posting)::date AS bulan, SUM(i.harga_nego) AS biaya_kol,
+                            COUNT(*) AS posting
+                     FROM submission_items i JOIN submissions s ON s.id=i.submission_id
+                     WHERE i.aktif AND i.keputusan_item='setuju' AND i.tanggal_posting IS NOT NULL
+                       AND s.status NOT IN ('Draft','Ditolak','Revisi','Diajukan','Review Asisten Manager','Review Manager')
+                     GROUP BY 1, 2""")
+    m = m.merge(spend, on=["store_id", "bulan"], how="left") if not spend.empty else m.assign(biaya_kol=np.nan, posting=np.nan)
+    for c in ("aktual", "budget", "ly", "biaya_kol", "posting"):
+        m[c] = pd.to_numeric(m[c], errors="coerce")
+    m["bulan"] = pd.to_datetime(m["bulan"])
+    m["ach"] = m["aktual"] / m["budget"].where(m["budget"] > 0) * 100
+    m["growth"] = (m["aktual"] / m["ly"].where(m["ly"] > 0) - 1) * 100
+    return m
+
+
+def period_achievement(store_ids: list[int], start: date, end: date) -> dict:
+    """Achievement periode pada hari yang sudah ada aktualnya. Budget resmi = budget bulanan (laporan achievement),
+    dibagi ke hari memakai pola budget harian; bila budget bulanan tidak ada, pakai budget harian apa adanya."""
+    r = db.one("""WITH a AS (
+                    SELECT t.store_id, t.tanggal, t.kunjungan, b.traffic AS bh, date_trunc('month', t.tanggal)::date AS bulan
+                    FROM offline_traffic_daily t LEFT JOIN traffic_target_daily b ON b.store_id=t.store_id AND b.tanggal=t.tanggal
+                    WHERE t.store_id = ANY(%s) AND t.tanggal BETWEEN %s AND %s),
+                  m AS (
+                    SELECT a.store_id, a.bulan, SUM(a.kunjungan) AS aktual, SUM(a.bh) AS bh_periode,
+                           (SELECT SUM(traffic) FROM traffic_target_daily x WHERE x.store_id=a.store_id
+                              AND date_trunc('month', x.tanggal)::date = a.bulan) AS bh_bulan,
+                           COUNT(*) AS hari
+                    FROM a GROUP BY 1, 2)
+                  SELECT SUM(m.aktual) AS aktual,
+                         SUM(CASE WHEN tm.budget IS NOT NULL AND m.hari >= EXTRACT(DAY FROM (m.bulan + INTERVAL '1 month - 1 day'))
+                                  THEN tm.budget
+                                  WHEN tm.budget IS NOT NULL AND m.bh_bulan > 0 AND m.bh_periode IS NOT NULL
+                                  THEN tm.budget * m.bh_periode / m.bh_bulan
+                                  WHEN tm.budget IS NOT NULL
+                                  THEN tm.budget * m.hari / EXTRACT(DAY FROM (m.bulan + INTERVAL '1 month - 1 day'))
+                                  ELSE m.bh_periode END) AS budget,
+                         (SELECT MAX(tanggal) FROM offline_traffic_daily WHERE store_id = ANY(%s) AND tanggal BETWEEN %s AND %s) AS sampai
+                  FROM m LEFT JOIN traffic_monthly tm ON tm.store_id=m.store_id AND tm.bulan=m.bulan""",
+               (store_ids, start, end, store_ids, start, end))
+    if not r or not r["budget"]:
+        return {}
+    return {"aktual": float(r["aktual"]), "budget": float(r["budget"]), "ach": float(r["aktual"]) / float(r["budget"]) * 100,
+            "sampai": r["sampai"]}
+
+
 # ====================================================================== segmentasi toko & pembanding
 @st.cache_data(ttl=3600, show_spinner=False)
 def store_clusters(k: int = 6) -> dict[int, int]:

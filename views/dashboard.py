@@ -39,6 +39,7 @@ start, end = f["start"], f["end"]
 t = A.traffic_daily()
 tp = t[(t["store_id"].isin(sids)) & (t["tanggal"].dt.date >= start) & (t["tanggal"].dt.date <= end)]
 traffic = tp["kunjungan"].sum()
+ach = A.period_achievement(sids, start, end)
 op = db.df("SELECT platform, views FROM official_posts WHERE tanggal::date BETWEEN %s AND %s", (start, end))
 kp = db.df("""SELECT k.platform, m.views FROM posts p JOIN kol_accounts k ON k.id=p.kol_id
               JOIN submission_items i ON i.id=p.item_id
@@ -61,7 +62,9 @@ lama = int(((pd.Timestamp.now(tz="UTC") - pd.to_datetime(pay["created_at"], utc=
 
 items = [
     {"label": "Views online", "value": F.angka(v_ig + v_tt), "sub": f"IG {F.angka(v_ig)} · TikTok {F.angka(v_tt)}"},
-    {"label": "Traffic offline", "value": F.angka(traffic), "sub": f"kunjungan {len(sids)} toko"},
+    {"label": "Traffic offline", "value": F.angka(traffic),
+     "sub": (f"achievement {F.persen(ach['ach'])} vs budget · s.d. {ach['sampai']:%d %b}" if ach else f"kunjungan {len(sids)} toko"),
+     "sub_tone": ("pos" if ach and ach["ach"] >= 100 else "neg") if ach else ""},
     {"label": "Dampak online → offline", "value": F.persen(dampak, tanda=True) if dampak is not None else "—",
      "sub": "toko ber-campaign vs pembanding" if dampak is not None else "belum ada campaign tayang", "tone": "pos", "highlight": True},
     {"label": "Sentimen netto komentar", "value": f"{s_all['net']:+.0f}",

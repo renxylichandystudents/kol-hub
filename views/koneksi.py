@@ -3,9 +3,11 @@ import pandas as pd
 import streamlit as st
 
 from lib import auth, db, ui
+from lib.formulas import angka
 from lib import social_api as S
 from lib.rbac import require
 
+S_fmt = lambda n: angka(n or 0, False)  # noqa: E731
 user = auth.current_user()
 require(user["role"], "api.manage")
 ui.header("Koneksi Instagram & TikTok", "API resmi Meta & TikTok — follower KOL, metrik link tayang, dan data akun resmi Mitra10")
@@ -30,9 +32,9 @@ with t_ig:
         stat = db.df("""SELECT COALESCE(api_status,'belum dicek') AS status, COUNT(*) AS akun FROM kol_accounts
                         WHERE lower(platform)='instagram' AND status='aktif' GROUP BY 1 ORDER BY 2 DESC""")
         c1, c2, c3 = st.columns(3)
-        c1.metric("Akun KOL/portal IG", n_kol)
-        c2.metric("Bisa dibaca API (Business/Creator)", int(stat.loc[stat["status"] == "ok", "akun"].sum()) if not stat.empty else 0)
-        c3.metric("Posting tayang ber-metrik API", db.scalar("SELECT COUNT(DISTINCT post_id) FROM post_metrics WHERE sumber='api'"))
+        c1.metric("Akun KOL/portal IG", S_fmt(n_kol))
+        c2.metric("Bisa dibaca API (Business/Creator)", S_fmt(int(stat.loc[stat["status"] == "ok", "akun"].sum()) if not stat.empty else 0))
+        c3.metric("Posting tayang ber-metrik API", S_fmt(db.scalar("SELECT COUNT(DISTINCT post_id) FROM post_metrics WHERE sumber='api'")))
         st.dataframe(stat, hide_index=True)
         b1, b2, b3 = st.columns(3)
         batch = b3.number_input("Akun per sinkron", 10, 400, 60, step=10,

@@ -1,4 +1,5 @@
 """Layar 4 — Performa Toko & Zona: online vs offline per zona dan toko."""
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -14,6 +15,69 @@ f = ui.global_filters(user, show_period=False)
 sids = f["store_ids"]
 
 stores = ui.stores()
+
+# ---------------------------------------------------------------- achievement vs budget & tahun lalu
+ma = A.monthly_achievement()
+if not ma.empty:
+    ma = ma[ma["store_id"].isin(sids)]
+    years = sorted(ma["bulan"].dt.year.unique(), reverse=True)
+    st.markdown("#### Achievement traffic vs budget & tahun lalu")
+    yc, vc = st.columns([1, 3])
+    yr = yc.selectbox("Tahun", years, key="ach_year")
+    cur = ma[ma["bulan"].dt.year == yr]
+    done = cur[cur["aktual"].notna()]
+    nat = cur.groupby("bulan").agg(aktual=("aktual", "sum"), budget=("budget", "sum"), ly=("ly", "sum"),
+                                   biaya_kol=("biaya_kol", "sum")).reset_index()
+    nat.loc[nat["aktual"] == 0, "aktual"] = np.nan
+    ytd = nat.dropna(subset=["aktual"])
+    ach_ytd = ytd["aktual"].sum() / ytd["budget"].sum() * 100 if ytd["budget"].sum() else None
+    gr_ytd = (ytd["aktual"].sum() / ytd["ly"].sum() - 1) * 100 if ytd["ly"].sum() else None
+    ui.kpis([
+        {"label": f"Traffic aktual {yr} (YTD)", "value": F.angka(ytd["aktual"].sum()),
+         "sub": f"{len(ytd)} bulan · s.d. {ytd['bulan'].max():%b %Y}" if not ytd.empty else "belum ada aktual"},
+        {"label": "Achievement vs budget", "value": F.persen(ach_ytd) if ach_ytd is not None else "—",
+         "sub": f"budget YTD {F.angka(ytd['budget'].sum())}", "highlight": True,
+         "tone": "pos" if (ach_ytd or 0) >= 100 else "neg"},
+        {"label": "Growth vs tahun lalu", "value": F.persen(gr_ytd, tanda=True) if gr_ytd is not None else "—",
+         "sub": f"LY {F.angka(ytd['ly'].sum())}", "tone": "pos" if (gr_ytd or 0) >= 0 else "neg"},
+        {"label": "Toko achieve ≥ 100% (YTD)", "value": str(int((done.groupby("store_id").apply(
+            lambda g: g["aktual"].sum() / g["budget"].sum() if g["budget"].sum() else 0) >= 1).sum())) if not done.empty else "—",
+         "sub": f"dari {done['store_id'].nunique()} toko"},
+        {"label": f"Biaya KOL & portal {yr}", "value": F.rupiah(nat["biaya_kol"].sum()), "sub": "dari campaign yang tayang"},
+    ])
+    st.write("")
+    chart = nat.assign(Bulan=nat["bulan"].dt.strftime("%m·%b")).set_index("Bulan")[["aktual", "budget", "ly"]].rename(
+        columns={"aktual": "Aktual", "budget": "Budget", "ly": "Tahun lalu"})
+    vc.line_chart(chart, height=230)
+    t_z, t_s = st.tabs(["Per zona", "Per toko"])
+
+    def _ach(df, keys):
+        g = df.groupby(keys).agg(aktual=("aktual", "sum"), budget_ytd=("budget", "sum"), ly=("ly", "sum"),
+                                 biaya_kol=("biaya_kol", "sum"), posting=("posting", "sum")).reset_index()
+        g["Achievement %"] = g["aktual"] / g["budget_ytd"].where(g["budget_ytd"] > 0) * 100
+        g["Growth vs LY %"] = (g["aktual"] / g["ly"].where(g["ly"] > 0) - 1) * 100
+        g["Biaya KOL per 1.000 traffic"] = g["biaya_kol"] / g["aktual"].where(g["aktual"] > 0) * 1000
+        return g
+
+    pct = {"Achievement %": st.column_config.ProgressColumn(format="%.1f%%", min_value=0, max_value=130),
+           "Growth vs LY %": st.column_config.NumberColumn(format="%+.1f%%"),
+           "Biaya KOL (Rp)": st.column_config.NumberColumn(format="localized"),
+           "Biaya KOL per 1.000 traffic": st.column_config.NumberColumn("Biaya KOL / 1.000 traffic (Rp)", format="localized")}
+    ren = {"zona": "Zona", "toko": "Toko", "aktual": "Traffic aktual", "budget_ytd": "Budget (bulan teraktual)", "ly": "Tahun lalu",
+           "biaya_kol": "Biaya KOL (Rp)", "posting": "Posting KOL"}
+    with t_z:
+        z = _ach(done, ["zona"]).rename(columns=ren)
+        st.dataframe(z, hide_index=True, use_container_width=True, column_config=pct)
+    with t_s:
+        s_ = _ach(done, ["toko", "zona"]).sort_values("Achievement %").rename(columns=ren)
+        st.dataframe(s_, hide_index=True, use_container_width=True, height=380, column_config=pct)
+        piv = cur.pivot_table(index="toko", columns=cur["bulan"].dt.strftime("%m·%b"), values="ach", aggfunc="mean")
+        with st.expander("Achievement % per bulan per toko"):
+            st.dataframe(piv.round(1), use_container_width=True)
+    ui.note("Achievement = traffic aktual ÷ budget traffic bulan yang sama; YTD hanya menghitung bulan yang sudah ada aktualnya. "
+            "Growth dibanding bulan yang sama tahun lalu. Biaya KOL per 1.000 traffic membantu melihat toko mana yang mahal "
+            "dibanding traffic-nya.")
+    st.divider()
 needs = A.store_needs()
 lifts = A.item_lifts()
 views = db.df("""SELECT i.store_id, SUM(m.views) AS views FROM posts p JOIN submission_items i ON i.id=p.item_id

@@ -32,6 +32,7 @@ PAGES = [
     ("social.py", "Social Media Listening", ":material/headphones:", "social.view", "Utama"),
     ("performa.py", "Performa Toko & Zona", ":material/location_on:", "stores.view", "Utama"),
     ("upload_traffic.py", "Upload Traffic Offline", ":material/upload:", "traffic.upload", "Utama"),
+    ("impor_traffic.py", "Impor Traffic & Budget", ":material/table_view:", "traffic.upload", "Utama"),
     ("kol_db.py", "Database KOL & Portal", ":material/group:", "kol.view", "KOL & Toko"),
     ("kol_analisa.py", "Analisa & Scoring KOL", ":material/insights:", "kol.view", "KOL & Toko"),
     ("bandingkan.py", "Bandingkan KOL", ":material/compare_arrows:", "kol.view", "KOL & Toko"),

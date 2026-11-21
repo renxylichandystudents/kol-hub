@@ -143,7 +143,7 @@ with t5:
             cur.execute("""TRUNCATE notifications, predictions, model_runs, data_checks, comment_nlp, social_comments, official_posts,
                            post_metrics, posts, production_tasks, brief_sections, briefs, payments, ro_forms, approvals, submission_items,
                            submissions, campaigns, store_requests, offline_traffic_daily, uploads, vendor_documents, ratecards,
-                           kol_metrics_snapshot, kol_accounts, promo_offline_events RESTART IDENTITY CASCADE""")
+                           kol_metrics_snapshot, kol_accounts, promo_offline_events, traffic_target_daily, traffic_monthly RESTART IDENTITY CASCADE""")
         auth.log_activity(user["id"], "hapus_data_contoh", "sistem", None, "Data contoh dihapus")
         st.cache_data.clear()
         st.session_state["flash_ok"] = "Data contoh dihapus. Silakan upload database KOL & traffic offline yang sebenarnya."

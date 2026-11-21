@@ -31,7 +31,8 @@ section[data-testid="stSidebar"] [data-baseweb="select"] > div{background:#1f2b4
 .kh-card.hl{background:var(--kh-soft);border-color:#c7d6fb}
 .kh-kpi-l{color:var(--kh-muted);font-size:.86rem}.kh-kpi-v{font-size:1.75rem;font-weight:750;line-height:1.25;color:#0f172a}
 .kh-kpi-s{color:var(--kh-muted);font-size:.8rem}
-.kh-kpi-v.pos{color:var(--kh-blue)}.kh-kpi-s.neg{color:var(--kh-red);font-weight:600}
+.kh-kpi-v.pos{color:var(--kh-blue)}.kh-kpi-v.neg{color:var(--kh-red)}
+.kh-kpi-s.neg{color:var(--kh-red);font-weight:600}.kh-kpi-s.pos{color:var(--kh-green);font-weight:600}
 .kh-badge{display:inline-block;padding:.12rem .55rem;border-radius:999px;font-size:.76rem;font-weight:600;white-space:nowrap}
 .kh-b-green{background:#dcfce7;color:#166534}.kh-b-red{background:#fee2e2;color:#991b1b}.kh-b-amber{background:#fef3c7;color:#92400e}
 .kh-b-blue{background:#dbeafe;color:#1e40af}.kh-b-gray{background:#eef2f7;color:#334155}.kh-b-purple{background:#ede9fe;color:#5b21b6}
@@ -50,8 +51,60 @@ section[data-testid="stSidebar"] [data-baseweb="select"] > div{background:#1f2b4
 """
 
 
+# ------------------------------------------------------------------ format angka (pemisah ribuan di semua tabel)
+_PLAIN_FMT = {"%d", "%.0f", "%i", "Rp %d", "Rp %.0f", "%,d"}
+_SKIP_COLS = {"tahun", "year", "id", "no", "kode", "baris_ke", "dow", "jam", "slot"}
+
+
+def _skip(col) -> bool:
+    c = str(col).strip().lower()
+    return c in _SKIP_COLS or c.endswith("_id") or c.startswith("id ")
+
+
+def number_config(data, column_config: dict | None) -> dict | None:
+    """Tambahkan format 'localized' (1.234.567 di browser berbahasa Indonesia) ke kolom angka tanpa format,
+    dan ganti format printf polos ('%d', 'Rp %d') yang tidak memakai pemisah ribuan."""
+    cfg = dict(column_config or {})
+    for k, v in list(cfg.items()):
+        if isinstance(v, dict) and isinstance(v.get("type_config"), dict) and v["type_config"].get("type") == "number":
+            fmt = v["type_config"].get("format")
+            if fmt in _PLAIN_FMT:
+                v = {**v, "type_config": {**v["type_config"], "format": "localized"}}
+                if fmt.startswith("Rp") and "rp" not in str(v.get("label") or k).lower():
+                    v["label"] = f"{v.get('label') or k} (Rp)"
+                cfg[k] = v
+    if isinstance(data, pd.DataFrame):
+        for col in data.columns:
+            if col in cfg or _skip(col):
+                continue
+            dt = data[col].dtype
+            if pd.api.types.is_numeric_dtype(dt) and not pd.api.types.is_bool_dtype(dt):
+                cfg[col] = st.column_config.NumberColumn(format="localized")
+            elif dt == object:
+                s = data[col].dropna()
+                if len(s) and s.map(lambda x: isinstance(x, (int, float)) and not isinstance(x, bool)).all():
+                    cfg[col] = st.column_config.NumberColumn(format="localized")
+    return cfg or None
+
+
+def _wrap(fn):
+    if getattr(fn, "_kh_wrapped", False):
+        return fn
+
+    def inner(data=None, *args, **kwargs):
+        try:
+            kwargs["column_config"] = number_config(data, kwargs.get("column_config"))
+        except Exception:  # noqa: BLE001 — format gagal tidak boleh menghentikan layar
+            pass
+        return fn(data, *args, **kwargs)
+    inner._kh_wrapped = True
+    return inner
+
+
 def setup():
     st.markdown(CSS, unsafe_allow_html=True)
+    st.dataframe = _wrap(st.dataframe)
+    st.data_editor = _wrap(st.data_editor)
 
 
 def esc(x) -> str:

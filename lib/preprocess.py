@@ -6,6 +6,7 @@ dan kecocokan nama toko (B.1).
 from __future__ import annotations
 
 import hashlib
+from datetime import date, datetime
 import re
 from difflib import SequenceMatcher
 
@@ -127,8 +128,10 @@ def clean_traffic(raw: pd.DataFrame, mapping: dict[str, str | None], matcher: St
 
     # 2) tanggal
     def parse_date(v):
-        if isinstance(v, (pd.Timestamp, np.datetime64)):
+        if isinstance(v, (pd.Timestamp, np.datetime64, datetime, date)):
             return pd.Timestamp(v).normalize()
+        if isinstance(v, str) and re.match(r"^\s*\d{4}-\d{1,2}-\d{1,2}", v):  # ISO (yyyy-mm-dd) — jangan dibaca dayfirst
+            return pd.to_datetime(v.strip()[:10], format="%Y-%m-%d", errors="coerce")
         if isinstance(v, (int, float)) and not pd.isna(v) and 20000 < v < 80000:  # serial Excel
             return pd.Timestamp("1899-12-30") + pd.Timedelta(days=int(v))
         return pd.to_datetime(str(v), dayfirst=True, errors="coerce")
