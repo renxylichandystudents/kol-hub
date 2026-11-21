@@ -134,8 +134,9 @@ with t4:
 
 with t5:
     require(user["role"], "data.reset_sample")
-    st.warning("Data contoh (KOL, campaign, traffic, komentar, pembayaran) dipakai untuk mencoba semua layar. "
-               "Hapus sebelum go-live. Master 61 toko/10 zona, akun pengguna, aturan pajak, dan riwayat aktivitas tetap disimpan.")
+    st.error("PERHATIAN: tombol ini mengosongkan SEMUA data KOL, portal, campaign, traffic, komentar, dan pembayaran — "
+             "termasuk data 2026 hasil impor Excel. Hanya master 61 toko/10 zona, akun pengguna, aturan pajak, "
+             "dan riwayat aktivitas yang tetap disimpan. Data yang terhapus tidak bisa dikembalikan dari aplikasi.")
     conf = st.text_input("Ketik HAPUS DATA CONTOH untuk konfirmasi")
     if st.button("Hapus data contoh", type="primary", disabled=conf != "HAPUS DATA CONTOH"):
         with db.transaction() as cur:

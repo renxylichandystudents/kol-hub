@@ -36,6 +36,7 @@ PAGES = [
     ("kol_analisa.py", "Analisa & Scoring KOL", ":material/insights:", "kol.view", "KOL & Toko"),
     ("bandingkan.py", "Bandingkan KOL", ":material/compare_arrows:", "kol.view", "KOL & Toko"),
     ("mapping.py", "Mapping Toko, Zona & KOL", ":material/map:", "kol.view", "KOL & Toko"),
+    ("impor.py", "Impor Excel KOL & Portal", ":material/upload_file:", "data.import", "KOL & Toko"),
     ("campaign.py", "Campaign & Pengajuan", ":material/list_alt:", "campaign.view", "Campaign"),
     ("seleksi.py", "Seleksi & Review KOL", ":material/checklist:", "campaign.edit", "Campaign"),
     ("draft.py", "Draft Pengajuan", ":material/edit_note:", "campaign.edit", "Campaign"),
@@ -101,7 +102,7 @@ with st.sidebar:
     if st.button("Keluar", use_container_width=True, icon=":material/logout:"):
         auth.logout()
         st.rerun()
-    st.caption("61 toko · 10 zona · data contoh")
+    st.caption("61 toko · 10 zona · data 2026")
 
 from lib import jobs  # noqa: E402
 

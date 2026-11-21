@@ -79,7 +79,7 @@ assert len(STORES) == 61, len(STORES)
 KATEGORI = ["comedy", "beauty", "lifestyle", "culinary", "general"]
 KATEGORI_LABEL = {"comedy": "Comedy", "beauty": "Beauty", "lifestyle": "Lifestyle",
                   "culinary": "Culinary", "general": "General"}
-DELIVERABLES = ["video", "reels", "story", "artikel"]
+DELIVERABLES = ["video", "reels", "feed", "story", "artikel"]
 PLATFORMS = ["Instagram", "TikTok", "Portal News"]
 
 ROLES = {

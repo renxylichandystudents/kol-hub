@@ -30,7 +30,7 @@ if acts:
             ui.go(page, **{key: int(acts[0]["entitas_id"])})
 
 ui.header("Dashboard Digital Marketing" if role != "store" else "Dashboard Toko",
-          "Ringkasan kerja harian · data contoh" if role != "finance" else "Ringkasan untuk Finance")
+          "Ringkasan kerja harian" if role != "finance" else "Ringkasan untuk Finance")
 f = ui.global_filters(user)
 sids = f["store_ids"]
 start, end = f["start"], f["end"]

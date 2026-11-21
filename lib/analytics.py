@@ -21,12 +21,27 @@ def today() -> date:
     return date.today()
 
 
+def _empty(cols: list[str], dates: tuple[str, ...] = ()) -> pd.DataFrame:
+    """DataFrame kosong ber-kolom (agar layar tetap jalan saat data traffic/komentar belum diunggah)."""
+    return pd.DataFrame({c: pd.Series(dtype="datetime64[ns]" if c in dates else "object") for c in cols})
+
+
+BASELINE_COLS = ["store_id", "traffic_4mgg", "forecast_4mgg", "vs_forecast", "harian"]
+NEEDS_COLS = ["store_id", "toko", "zona", "zone_id", "kota", "traffic_4mgg", "vs_forecast", "penurunan_pct", "hari_sejak",
+              "responsivitas", "selisih_target", "campaign_30hr", "skor", "saran"]
+LIFT_COLS = ["item_id", "kol_id", "store_id", "zone_id", "tanggal", "campaign", "biaya_toko", "biaya", "share", "ok", "pre", "post",
+             "counterfactual", "kunjungan_tambahan", "lift", "lift_low", "lift_high", "extra_low", "extra_high", "signifikan",
+             "pembanding", "pembanding_naik", "keyakinan", "cpiv"]
+
+
 # ====================================================================== traffic
 @st.cache_data(ttl=TTL, show_spinner=False)
 def traffic_daily() -> pd.DataFrame:
     d = db.df("SELECT store_id, tanggal, kunjungan, transaksi, flag FROM offline_traffic_daily")
     if d.empty:
-        return pd.DataFrame(columns=["store_id", "tanggal", "kunjungan", "transaksi", "flag"])
+        return pd.DataFrame({"store_id": pd.Series(dtype="int64"), "tanggal": pd.Series(dtype="datetime64[ns]"),
+                             "kunjungan": pd.Series(dtype="float64"), "transaksi": pd.Series(dtype="float64"),
+                             "flag": pd.Series(dtype="object")})
     d["tanggal"] = pd.to_datetime(d["tanggal"])
     return d
 
@@ -63,7 +78,7 @@ def store_baseline_table() -> pd.DataFrame:
     pola hari sama, minggu event & campaign dikeluarkan)."""
     t = traffic_daily()
     if t.empty:
-        return pd.DataFrame()
+        return _empty(BASELINE_COLS)
     last = t["tanggal"].max()
     items = campaign_items()
     rows = []
@@ -186,9 +201,10 @@ def lift_for(store_id: int, posting: pd.Timestamp, biaya: float = 0.0, pre_days:
 def item_lifts() -> pd.DataFrame:
     """Lift per (toko, tanggal tayang) untuk semua item yang sudah tayang ≥ 7 hari."""
     items = campaign_items()
-    if items.empty:
-        return pd.DataFrame()
-    last = traffic_daily()["tanggal"].max()
+    tr = traffic_daily()
+    if items.empty or tr.empty:
+        return _empty(LIFT_COLS, ("tanggal",))
+    last = tr["tanggal"].max()
     rows = []
     done = items[items["tanggal_posting"] <= last - pd.Timedelta(days=6)]
     groups = done.groupby(["store_id", "tanggal_posting"])
@@ -199,7 +215,7 @@ def item_lifts() -> pd.DataFrame:
                 rows.append({"item_id": it["item_id"], "kol_id": it["kol_id"], "store_id": sid, "zone_id": it["zone_id"],
                              "tanggal": d, "campaign": it["campaign"], "biaya_toko": g["harga_nego"].sum(),
                              "biaya": it["harga_nego"], "share": it["harga_nego"] / max(g["harga_nego"].sum(), 1), **r})
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows) if rows else _empty(LIFT_COLS, ("tanggal",))
 
 
 # ====================================================================== KOL features & skor
@@ -430,7 +446,7 @@ def segment_kols(d: pd.DataFrame) -> list[str]:
 def store_needs() -> pd.DataFrame:
     base = store_baseline_table()
     if base.empty:
-        return base
+        return _empty(NEEDS_COLS)
     stores = db.df("SELECT s.id, s.nama, s.kota, s.zone_id, z.nama AS zona, s.target_kunjungan_mingguan FROM stores s JOIN zones z ON z.id=s.zone_id")
     items = campaign_items()
     lifts = item_lifts()
@@ -455,7 +471,7 @@ def store_needs() -> pd.DataFrame:
                      "campaign_30hr": c30})
     scored = pd.DataFrame(F.store_need_scores(rows))
     if scored.empty:
-        return scored
+        return _empty(NEEDS_COLS)
 
     def saran(r):
         if r["skor"] >= 85: return "2 KOL + portal"

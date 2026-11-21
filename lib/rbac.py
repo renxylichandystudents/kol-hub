@@ -51,6 +51,7 @@ PERMISSIONS: dict[str, set[str]] = {
     # Akses & role
     "admin.users": {"super_user"},
     "data.reset_sample": {"super_user"},
+    "data.import": {"ecommerce", "super_user"},
 }
 
 

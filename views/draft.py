@@ -6,6 +6,7 @@ from lib import analytics as A
 from lib import auth, db, ui
 from lib import formulas as F
 from lib import workflow as W
+from lib.master import DELIVERABLES
 from lib.rbac import require
 
 user = auth.current_user()
@@ -89,7 +90,7 @@ ed = st.data_editor(tbl, hide_index=True, use_container_width=True,
                     column_config={
                         "Ratecard": st.column_config.NumberColumn(format="Rp %d"), "Saran harga": st.column_config.NumberColumn(format="Rp %d"),
                         "Harga nego": st.column_config.NumberColumn(format="Rp %d", min_value=0, step=100_000),
-                        "Deliverable": st.column_config.SelectboxColumn(options=["video", "reels", "story", "artikel"]),
+                        "Deliverable": st.column_config.SelectboxColumn(options=DELIVERABLES),
                         "Skor": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f"),
                         "Aksi revisi": st.column_config.SelectboxColumn(options=["pilih…", "pertahankan", "ganti", "hapus"])},
                     key=f"draft_{pick}")

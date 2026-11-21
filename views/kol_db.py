@@ -8,7 +8,7 @@ from lib import analytics as A
 from lib import auth, db, docs, nlp, ui
 from lib import formulas as F
 from lib import workflow as W
-from lib.master import KATEGORI, KATEGORI_LABEL
+from lib.master import DELIVERABLES, KATEGORI, KATEGORI_LABEL
 from lib.preprocess import dedupe_kols, normalize_username
 from lib.rbac import can, require
 
@@ -161,7 +161,7 @@ with tab_add:
             er = c9.number_input("ER (%)", min_value=0.0, max_value=100.0, step=0.1)
             harga = c10.number_input("Ratecard (Rp)", min_value=0, step=100_000)
             c11, c12, c13 = st.columns(3)
-            deliv = c11.selectbox("Deliverable", ["video", "reels", "story", "artikel"])
+            deliv = c11.selectbox("Deliverable", DELIVERABLES)
             badan = c12.checkbox("Badan hukum (PPh 23)", value=tipe == "portal")
             npwp = c13.checkbox("Punya NPWP", value=True)
             ok = st.form_submit_button("Simpan akun", type="primary")

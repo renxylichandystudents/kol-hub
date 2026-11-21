@@ -102,8 +102,19 @@ def scalar(sql: str, params=None):
 
 
 def df(sql: str, params=None) -> pd.DataFrame:
-    rows = query(sql, params)
-    return pd.DataFrame(rows)
+    """Hasil query sebagai DataFrame. Bila tidak ada baris, kolom tetap ada (nama dari cursor.description)
+    agar layar tidak error saat tabel masih kosong."""
+    def run():
+        from psycopg2.extras import RealDictCursor
+        with conn() as c, c.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, _params(params))
+            if not cur.description:
+                return [], []
+            return [dict(r) for r in cur.fetchall()], [d.name for d in cur.description]
+    rows, cols = _retrying(run)
+    if not rows:
+        return pd.DataFrame(columns=cols)
+    return pd.DataFrame([_clean_row(r) for r in rows])
 
 
 def execute(sql: str, params=None, returning: bool = False):
